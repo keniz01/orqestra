@@ -51,6 +51,43 @@ class TenantBinding:
 
 
 @dataclass(frozen=True, slots=True)
+class DelegationContext:
+    """Bounded authority granted to an agent for one task."""
+
+    agent_id: str
+    task_id: str
+    allowed_capabilities: frozenset[str]
+    expires_at: datetime
+    approval_id: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "agent_id", _required_text(self.agent_id, "agent_id"))
+        object.__setattr__(self, "task_id", _required_text(self.task_id, "task_id"))
+        capabilities = frozenset(
+            _required_text(capability, "capability")
+            for capability in self.allowed_capabilities
+        )
+        if not capabilities:
+            raise ValueError("allowed_capabilities must not be empty")
+        object.__setattr__(self, "allowed_capabilities", capabilities)
+        if self.expires_at.tzinfo is None:
+            raise ValueError("expires_at must include timezone information")
+        if self.approval_id is not None:
+            object.__setattr__(
+                self, "approval_id", _required_text(self.approval_id, "approval_id")
+            )
+
+    def allows(self, capability: str, now: datetime | None = None) -> bool:
+        """Return whether this delegation can invoke a capability right now."""
+
+        current_time = now or datetime.now(timezone.utc)
+        return (
+            capability in self.allowed_capabilities
+            and current_time < self.expires_at
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class CapabilityRequest:
     """A typed request for one governed capability invocation."""
 
@@ -61,6 +98,7 @@ class CapabilityRequest:
     columns: frozenset[str] = frozenset()
     purpose: str = "analytical_read"
     task_id: str | None = None
+    delegation: DelegationContext | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -101,6 +139,7 @@ class QueryResult:
 
     rows: tuple[Mapping[str, Any], ...]
     truncated: bool = False
+    result_bytes: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,6 +155,7 @@ class AuditEvent:
     reason: str
     query_hash: str | None = None
     task_id: str | None = None
+    agent_id: str | None = None
     occurred_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def __post_init__(self) -> None:

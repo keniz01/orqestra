@@ -3,6 +3,9 @@ from __future__ import annotations
 import pytest
 
 from execution_kernel import (
+    CapabilityRegistry,
+    CapabilitySpec,
+    DelegationContext,
     ExecutionKernel,
     ExecutionLimits,
     Principal,
@@ -13,6 +16,7 @@ from execution_kernel import (
     SqlValidationError,
     validate_read_query,
 )
+from datetime import datetime, timedelta, timezone
 
 
 class FakeExecutor:
@@ -85,6 +89,7 @@ def test_kernel_resolves_tenant_authorizes_masks_and_bounds_results():
 
     assert result.rows == ({"id": 1, "email": None}, {"id": 2, "email": None})
     assert result.truncated is True
+    assert result.result_bytes > 0
     assert executor.calls[0][0].target == "server-owned-target"
     assert [event.event_type for event in events] == [
         "capability_decision",
@@ -105,6 +110,62 @@ def test_kernel_denies_unmatched_policy_before_executor():
 
     assert executor.calls == []
     assert events[0].decision == "deny"
+
+
+def test_delegation_scopes_agent_to_registered_capability_and_task():
+    events = []
+    kernel, executor = make_kernel(events)
+    delegation = DelegationContext(
+        agent_id="analyst-agent",
+        task_id="task-42",
+        allowed_capabilities=frozenset({"data.execute_read_query"}),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+    )
+
+    result = kernel.execute(
+        principal=make_principal(),
+        database_id="analytics",
+        plan=QueryPlan("SELECT id FROM customers"),
+        delegation=delegation,
+    )
+
+    assert result.rows
+    assert events[0].agent_id == "analyst-agent"
+    assert events[0].task_id == "task-42"
+
+
+def test_expired_delegation_cannot_execute():
+    events = []
+    kernel, executor = make_kernel(events)
+    delegation = DelegationContext(
+        agent_id="analyst-agent",
+        task_id="task-42",
+        allowed_capabilities=frozenset({"data.execute_read_query"}),
+        expires_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+    )
+
+    with pytest.raises(PermissionError, match="does not authorize"):
+        kernel.execute(
+            principal=make_principal(),
+            database_id="analytics",
+            plan=QueryPlan("SELECT id FROM customers"),
+            delegation=delegation,
+        )
+
+    assert executor.calls == []
+
+
+def test_registry_rejects_duplicate_capabilities():
+    registry = CapabilityRegistry()
+    capability = CapabilitySpec(
+        name="data.execute_read_query",
+        description="Read data",
+        read_only=True,
+    )
+    registry.register(capability)
+
+    with pytest.raises(PermissionError, match="already registered"):
+        registry.register(capability)
 
 
 def test_kernel_rejects_cross_tenant_database_resolution():

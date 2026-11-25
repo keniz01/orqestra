@@ -86,3 +86,22 @@ def test_stale_and_expired_approvals_cannot_be_used():
         task_id="task-2",
         capability="data.export_result",
     )
+
+
+def test_approval_store_emits_governance_events():
+    events = []
+    store = ApprovalStore(event_sink=events.append)
+    request = create_request(store)
+
+    store.decide(
+        principal("approver"),
+        request.approval_id,
+        ApprovalDecision.REJECT,
+        expected_version=request.version,
+    )
+
+    assert [event.event_type for event in events] == [
+        "approval.created",
+        "approval.decided",
+    ]
+    assert all(event.org_id == "org-1" for event in events)

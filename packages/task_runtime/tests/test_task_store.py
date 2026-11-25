@@ -75,3 +75,22 @@ def test_stale_and_invalid_transitions_are_rejected():
             TaskStatus.PENDING,
             expected_version=1,
         )
+
+
+def test_task_store_emits_governance_events_for_state_changes():
+    events = []
+    store = InMemoryTaskStore(event_sink=events.append)
+
+    task = create_task(store)
+    store.transition(
+        principal(),
+        task.task_id,
+        TaskStatus.RUNNING,
+        expected_version=task.version,
+    )
+
+    assert [event.event_type for event in events] == [
+        "task.created",
+        "task.transitioned",
+    ]
+    assert all(event.org_id == "org-1" for event in events)

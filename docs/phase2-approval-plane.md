@@ -15,6 +15,7 @@ capabilities that require human authorization.
 - optimistic version checks;
 - approval validation that matches task and capability;
 - execution-kernel enforcement for approval-required capabilities;
+- append-only governance events for requests, decisions, and expiry;
 - in-memory reference store for local development and contract tests.
 
 ## Security boundary

@@ -20,6 +20,28 @@ class ReadWorkflowPlanner(Protocol):
         """Return a model-independent plan for a user goal."""
 
 
+class ContextAwareReadWorkflowPlanner(Protocol):
+    """Plans only from trusted identity and already-filtered context."""
+
+    def plan_for(
+        self, principal: Any, goal: str, context: Any
+    ) -> ReadWorkflowPlan:
+        """Return typed intent without SQL, credentials, or connector routing."""
+
+
+class ReadWorkflowReplanner(Protocol):
+    """Produces a bounded replacement plan after a critique."""
+
+    def replan(
+        self,
+        goal: str,
+        previous: ReadWorkflowPlan,
+        result: ReadWorkflowResult,
+        attempt: int,
+    ) -> ReadWorkflowPlan:
+        """Return a plan that does not broaden the original authority."""
+
+
 class ReadWorkflowRunner(Protocol):
     """Consumes plans and injected governed results without executing them."""
 

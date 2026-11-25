@@ -6,6 +6,11 @@ import pytest
 
 from execution_kernel import Principal
 from governed_orchestrator import GovernedReadOrchestrator
+from governed_orchestrator import (
+    GovernedReadWorkflowService,
+    InMemoryWorkflowReportStore,
+    WorkflowReplanLimitError,
+)
 from governance import InMemoryGovernanceLedger, SQLiteGovernanceLedger
 from read_workflows import (
     CapabilityResultState,
@@ -37,7 +42,14 @@ PLAN = ReadWorkflowPlan(
 )
 
 
-def build(executor, *, clock=lambda: NOW, ttl=timedelta(minutes=5), critic=None):
+def build(
+    executor,
+    *,
+    clock=lambda: NOW,
+    ttl=timedelta(minutes=5),
+    critic=None,
+    report_store=None,
+):
     ledger = InMemoryGovernanceLedger()
     tasks = InMemoryTaskStore()
     orchestrator = GovernedReadOrchestrator(
@@ -48,6 +60,7 @@ def build(executor, *, clock=lambda: NOW, ttl=timedelta(minutes=5), critic=None)
         ledger=ledger,
         executor=executor,
         critic=critic,
+        report_store=report_store,
         owner_id="worker-1",
         lease_ttl=ttl,
         clock=clock,
@@ -192,6 +205,58 @@ def test_result_critic_can_require_review():
     assert outcome.result.state is WorkflowResultState.PARTIAL
     assert outcome.result.critique.state is CritiqueState.NEEDS_REVIEW
     assert outcome.report.citations == ("metric:revenue",)
+
+
+def test_report_is_replayable_with_tenant_scope():
+    store = InMemoryWorkflowReportStore()
+    orchestrator, _, _ = build(
+        type("Executor", (), {"execute": lambda self, principal, task_id, step: success(step)})(),
+        report_store=store,
+    )
+
+    outcome = orchestrator.run(PRINCIPAL, PLAN)
+
+    assert orchestrator.report_for(PRINCIPAL, outcome.task.task_id) == outcome.report
+    assert orchestrator.report_for(
+        Principal(user_id="other", org_id="org-2"), outcome.task.task_id
+    ) is None
+
+
+def test_replanning_cannot_expand_capability_authority():
+    class Critic:
+        def critique(self, plan, result):
+            return WorkflowCritique(
+                state=CritiqueState.NEEDS_REVIEW,
+                reason="Review required.",
+            )
+
+    class Planner:
+        def plan_for(self, principal, goal, context):
+            return PLAN
+
+    class Replanner:
+        def replan(self, goal, previous, result, attempt):
+            return ReadWorkflowPlan(
+                goal=goal,
+                steps=(ReadPlanStep("unsafe", "data.write", {}),),
+            )
+
+    orchestrator, _, _ = build(
+        type("Executor", (), {"execute": lambda self, principal, task_id, step: success(step)})(),
+        critic=Critic(),
+    )
+    service = GovernedReadWorkflowService(
+        orchestrator,
+        Planner(),
+        replanner=Replanner(),
+    )
+
+    with pytest.raises(WorkflowReplanLimitError):
+        service.run_goal(
+            PRINCIPAL,
+            PLAN.goal,
+            type("Context", (), {"tenant_id": PRINCIPAL.org_id})(),
+        )
 
 
 def test_resume_skips_checkpointed_steps_after_interruption():

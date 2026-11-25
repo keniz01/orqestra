@@ -16,3 +16,16 @@ results, reviews successful results through a structured critic boundary, and
 exposes an evidence-backed report keyed by the durable task trace identifier.
 The runner and report contracts remain model-independent; capability
 authorization and execution stay outside this package.
+
+The complete reference path is:
+
+1. assemble tenant-filtered context;
+2. produce typed intent from a deterministic planner;
+3. materialize server-owned read queries through a capability adapter;
+4. enforce policy, tenant binding, read-only SQL validation, and kernel budgets;
+5. critique results and allow only bounded, non-broadening replans; and
+6. persist a tenant-scoped report keyed by the durable task trace.
+
+The Phase 4 exit proof covers successful governed reads, policy denial,
+cross-tenant context rejection, direct SQL and credential rejection, budget
+limits, provenance requirements, and report replay isolation.

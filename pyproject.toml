@@ -13,10 +13,12 @@ pythonpath = [
     "packages/task_runtime",
     "packages/approval_plane",
     "packages/governance",
+    "packages/read_workflows",
 ]
 testpaths = [
     "packages/execution_kernel/tests",
     "packages/task_runtime/tests",
     "packages/approval_plane/tests",
     "packages/governance/tests",
+    "packages/read_workflows/tests",
 ]

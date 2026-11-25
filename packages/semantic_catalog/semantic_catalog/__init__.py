@@ -13,11 +13,18 @@ from .models import (
     Table,
     TableMetadata,
 )
+from .repository import (
+    CatalogRepository,
+    MetadataCollector,
+    MetadataIngestionService,
+    SQLiteSemanticCatalog,
+)
 
 __all__ = [
     "CatalogConflict",
     "CatalogPolicy",
     "CatalogScopeError",
+    "CatalogRepository",
     "Classification",
     "Column",
     "ColumnMetadata",
@@ -25,8 +32,11 @@ __all__ = [
     "DataSourceMetadata",
     "Freshness",
     "InMemorySemanticCatalog",
+    "MetadataCollector",
+    "MetadataIngestionService",
     "Provenance",
     "SourceKind",
+    "SQLiteSemanticCatalog",
     "Table",
     "TableMetadata",
 ]

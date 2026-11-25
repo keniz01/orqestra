@@ -19,12 +19,20 @@ from .repository import (
     MetadataIngestionService,
     SQLiteSemanticCatalog,
 )
+from .semantic_models import (
+    BusinessMetric,
+    LineageEdge,
+    SemanticEntity,
+    SemanticRelationship,
+)
+from .semantic_repository import SemanticFactRepository, SQLiteSemanticFacts
 
 __all__ = [
     "CatalogConflict",
     "CatalogPolicy",
     "CatalogScopeError",
     "CatalogRepository",
+    "BusinessMetric",
     "Classification",
     "Column",
     "ColumnMetadata",
@@ -36,7 +44,12 @@ __all__ = [
     "MetadataIngestionService",
     "Provenance",
     "SourceKind",
+    "SemanticEntity",
+    "SemanticFactRepository",
+    "SemanticRelationship",
+    "SQLiteSemanticFacts",
     "SQLiteSemanticCatalog",
+    "LineageEdge",
     "Table",
     "TableMetadata",
 ]

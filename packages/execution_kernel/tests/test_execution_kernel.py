@@ -4,11 +4,14 @@ import pytest
 
 from approval_plane import ApprovalDecision, ApprovalStore
 from execution_kernel import (
+    CancellationToken,
     CapabilityRegistry,
     CapabilitySpec,
     DelegationContext,
+    ExecutionCancelled,
     ExecutionKernel,
     ExecutionLimits,
+    ExecutionTimedOut,
     Principal,
     QueryPlan,
     RulePolicyEvaluator,
@@ -31,6 +34,19 @@ class FakeExecutor:
             {"id": 2, "email": "two@example.test"},
             {"id": 3, "email": "three@example.test"},
         ]
+
+
+class CancellableExecutor(FakeExecutor):
+    def __init__(self, outcome=None) -> None:
+        super().__init__()
+        self.outcome = outcome
+
+    def execute_with_context(self, binding, query, params, context):
+        self.calls.append((binding, query, params))
+        context.ensure_active()
+        if self.outcome is not None:
+            raise self.outcome
+        return [{"id": 1}]
 
 
 def make_principal() -> Principal:
@@ -263,6 +279,91 @@ def test_approval_required_capability_fails_closed_without_checker():
         )
 
     assert executor.calls == []
+    assert events[-1].decision == "deny"
+
+
+def test_delegation_rejects_conflicting_task_id():
+    events = []
+    kernel, executor = make_kernel(events)
+    delegation = DelegationContext(
+        agent_id="analyst-agent",
+        task_id="task-42",
+        allowed_capabilities=frozenset({"data.execute_read_query"}),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+    )
+
+    with pytest.raises(PermissionError, match="does not match"):
+        kernel.execute(
+            principal=make_principal(),
+            database_id="analytics",
+            plan=QueryPlan("SELECT id FROM customers"),
+            task_id="different-task",
+            delegation=delegation,
+        )
+
+    assert executor.calls == []
+    assert events[-1].decision == "deny"
+
+
+def test_cancelled_execution_is_rejected_before_connector_call():
+    events = []
+    executor = CancellableExecutor()
+    kernel, executor = make_kernel(events, executor)
+    cancellation = CancellationToken()
+    cancellation.cancel()
+
+    with pytest.raises(ExecutionCancelled, match="cancelled"):
+        kernel.execute(
+            principal=make_principal(),
+            database_id="analytics",
+            plan=QueryPlan("SELECT id FROM customers"),
+            cancellation=cancellation,
+        )
+
+    assert executor.calls == []
+    assert events[-1].event_type == "capability_execution"
+    assert events[-1].decision == "deny"
+
+
+def test_cancellable_executor_receives_deadline():
+    events = []
+    executor = CancellableExecutor(outcome=ExecutionTimedOut("connector timeout"))
+    kernel = ExecutionKernel(
+        tenants=TenantBindingRegistry(
+            {
+                ("org-1", "analytics"): TenantBinding(
+                    org_id="org-1",
+                    database_id="analytics",
+                    connector_id="postgres-primary",
+                    target="server-owned-target",
+                )
+            }
+        ),
+        policy=RulePolicyEvaluator(
+            allow_rules=(
+                {
+                    "capability": "data.execute_read_query",
+                    "org_id": "org-1",
+                    "roles": ("viewer",),
+                    "database_id": "analytics",
+                    "tables": ("customers",),
+                },
+            )
+        ),
+        executor=executor,
+        audit_sink=events.append,
+        limits=ExecutionLimits(timeout_seconds=0.1),
+    )
+
+    with pytest.raises(ExecutionTimedOut, match="connector timeout"):
+        kernel.execute(
+            principal=make_principal(),
+            database_id="analytics",
+            plan=QueryPlan("SELECT id FROM customers"),
+        )
+
+    assert executor.calls
+    assert events[-1].event_type == "capability_execution"
     assert events[-1].decision == "deny"
 
 

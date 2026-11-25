@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from threading import Event
+from time import monotonic
 from typing import Any, Mapping
 
 
@@ -131,6 +133,46 @@ class QueryPlan:
         if not isinstance(self.sql, str) or not self.sql.strip():
             raise ValueError("sql must be a non-empty string")
         object.__setattr__(self, "params", dict(self.params))
+
+
+class ExecutionCancelled(RuntimeError):
+    """Raised when a caller cancels an in-flight governed execution."""
+
+
+class ExecutionTimedOut(TimeoutError):
+    """Raised when a governed execution exceeds its configured deadline."""
+
+
+class CancellationToken:
+    """Thread-safe cancellation signal shared with cancellable executors."""
+
+    def __init__(self) -> None:
+        self._event = Event()
+
+    def cancel(self) -> None:
+        self._event.set()
+
+    @property
+    def cancelled(self) -> bool:
+        return self._event.is_set()
+
+
+@dataclass(slots=True)
+class ExecutionContext:
+    """Execution deadline and cancellation state exposed to connector adapters."""
+
+    cancellation: CancellationToken
+    timeout_seconds: float | None
+    started_at: float = field(default_factory=monotonic)
+
+    def ensure_active(self) -> None:
+        if self.cancellation.cancelled:
+            raise ExecutionCancelled("Execution was cancelled.")
+        if (
+            self.timeout_seconds is not None
+            and monotonic() - self.started_at >= self.timeout_seconds
+        ):
+            raise ExecutionTimedOut("Execution exceeded its timeout.")
 
 
 @dataclass(frozen=True, slots=True)

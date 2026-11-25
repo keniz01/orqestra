@@ -12,7 +12,11 @@ from .capabilities import CapabilityRegistry, CapabilitySpec
 from .contracts import (
     AuditEvent,
     CapabilityRequest,
+    CancellationToken,
     DelegationContext,
+    ExecutionContext,
+    ExecutionCancelled,
+    ExecutionTimedOut,
     Principal,
     QueryPlan,
     QueryResult,
@@ -26,6 +30,17 @@ from .tenant import TenantBindingRegistry, TenantResolutionError
 class QueryExecutor(Protocol):
     def execute(
         self, binding: TenantBinding, query: ValidatedQuery, params: Mapping[str, Any]
+    ) -> Sequence[Mapping[str, Any]]:
+        ...
+
+
+class CancellableQueryExecutor(Protocol):
+    def execute_with_context(
+        self,
+        binding: TenantBinding,
+        query: ValidatedQuery,
+        params: Mapping[str, Any],
+        context: ExecutionContext,
     ) -> Sequence[Mapping[str, Any]]:
         ...
 
@@ -46,12 +61,15 @@ class ApprovalChecker(Protocol):
 class ExecutionLimits:
     max_rows: int = 5_000
     max_result_bytes: int = 5_000_000
+    timeout_seconds: float | None = None
 
     def __post_init__(self) -> None:
         if self.max_rows < 1:
             raise ValueError("max_rows must be positive")
         if self.max_result_bytes < 1:
             raise ValueError("max_result_bytes must be positive")
+        if self.timeout_seconds is not None and self.timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive when provided")
 
 
 class ExecutionKernel:
@@ -94,11 +112,32 @@ class ExecutionKernel:
         plan: QueryPlan,
         task_id: str | None = None,
         delegation: DelegationContext | None = None,
+        cancellation: CancellationToken | None = None,
     ) -> QueryResult:
         raw_query_hash = hashlib.sha256(plan.sql.strip().encode("utf-8")).hexdigest()
         capability = self._capabilities.require(self.READ_CAPABILITY)
         if not capability.read_only:
             raise RuntimeError("Read execution capability must be read-only.")
+        if (
+            delegation is not None
+            and task_id is not None
+            and task_id != delegation.task_id
+        ):
+            self._audit_sink(
+                AuditEvent(
+                    event_type="capability_decision",
+                    user_id=principal.user_id,
+                    org_id=principal.org_id,
+                    capability=self.READ_CAPABILITY,
+                    database_id=database_id,
+                    decision="deny",
+                    reason="Delegated execution task does not match the requested task.",
+                    query_hash=raw_query_hash,
+                    task_id=task_id,
+                    agent_id=delegation.agent_id,
+                )
+            )
+            raise PermissionError("Delegated execution task does not match the requested task.")
         if delegation is not None and not delegation.allows(
             self.READ_CAPABILITY
         ):
@@ -253,7 +292,39 @@ class ExecutionKernel:
         if not decision.allowed:
             raise PermissionError(decision.reason)
 
-        raw_rows = self._executor.execute(binding, validated, plan.params)
+        context = ExecutionContext(
+            cancellation=cancellation or CancellationToken(),
+            timeout_seconds=self._limits.timeout_seconds,
+        )
+        try:
+            context.ensure_active()
+            execute_with_context = getattr(self._executor, "execute_with_context", None)
+            if execute_with_context is not None:
+                raw_rows = execute_with_context(
+                    binding,
+                    validated,
+                    plan.params,
+                    context,
+                )
+            else:
+                raw_rows = self._executor.execute(binding, validated, plan.params)
+            context.ensure_active()
+        except (ExecutionCancelled, ExecutionTimedOut) as exc:
+            self._audit_sink(
+                AuditEvent(
+                    event_type="capability_execution",
+                    user_id=principal.user_id,
+                    org_id=principal.org_id,
+                    capability=request.capability,
+                    database_id=database_id,
+                    decision="deny",
+                    reason=str(exc),
+                    query_hash=query_hash,
+                    task_id=effective_task_id,
+                    agent_id=agent_id,
+                )
+            )
+            raise
         max_rows = min(
             self._limits.max_rows,
             capability.max_rows if capability.max_rows is not None else self._limits.max_rows,

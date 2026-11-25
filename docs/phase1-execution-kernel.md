@@ -1,6 +1,6 @@
 # Phase 1 — Execution Kernel Foundation
 
-**Status:** Initial slice implemented
+**Status:** Hardened kernel contracts implemented; transport compatibility remains
 **Branch:** `feat/execution-kernel-foundation`
 
 This phase introduces a transport-independent, deterministic kernel for
@@ -24,8 +24,10 @@ agent models, and database credentials.
 - append-only audit events for tenant denial, SQL denial, policy decisions, and
   successful capability execution;
 - executor protocol that keeps database I/O outside the kernel;
+- explicit cancellation and timeout context for cancellable connector adapters;
+- delegated task identity consistency checks;
 - focused tests for authorization, tenant isolation, SQL rejection, masking,
-  and result bounds.
+  result bounds, cancellation, timeout, and delegated task scope.
 
 ## Explicit non-goals for this slice
 
@@ -47,6 +49,6 @@ python3 -m pytest -q
 11 passed
 ```
 
-The current executor protocol is deliberately synchronous and in-process.
-Upgrade it to an asynchronous, cancellable connector contract before
-production database integrations are added.
+Legacy synchronous executors remain supported for compatibility. Production
+connectors must implement the cancellable execution context so they can enforce
+the deadline and observe cancellation while database I/O is in progress.

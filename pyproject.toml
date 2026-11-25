@@ -10,7 +10,9 @@ dependencies = [
 [tool.pytest.ini_options]
 pythonpath = [
     "packages/execution_kernel",
+    "packages/task_runtime",
 ]
 testpaths = [
     "packages/execution_kernel/tests",
+    "packages/task_runtime/tests",
 ]

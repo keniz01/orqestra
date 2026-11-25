@@ -157,6 +157,7 @@ class AuditEvent:
     task_id: str | None = None
     agent_id: str | None = None
     occurred_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    payload: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -173,3 +174,4 @@ class AuditEvent:
                 field_name,
                 _required_text(getattr(self, field_name), field_name),
             )
+        object.__setattr__(self, "payload", dict(self.payload))

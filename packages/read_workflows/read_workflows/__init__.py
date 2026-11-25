@@ -9,6 +9,7 @@ from .contracts import (
     ReadWorkflowResult,
     WorkflowResultState,
 )
+from .context import ContextAssembler, ContextPolicy, ContextScopeError, GovernedContext
 from .protocol import (
     CapabilityResultProvider,
     ReadWorkflowPlanner,
@@ -20,8 +21,12 @@ from .runner import InMemoryReadWorkflowRunner
 __all__ = [
     "CapabilityResultProvider",
     "CapabilityResultState",
+    "ContextAssembler",
+    "ContextPolicy",
+    "ContextScopeError",
     "Evidence",
     "GovernedCapabilityResult",
+    "GovernedContext",
     "InMemoryReadWorkflowRunner",
     "ReadPlanStep",
     "ReadWorkflowPlan",

@@ -18,3 +18,8 @@ requires provenance on every source fact and can append a safe
 `catalog.ingested` governance event containing identifiers only. Adapters must
 preserve the same tenant and policy-filtering contract before metadata reaches
 an agent or execution planner.
+
+The Phase 3 exit proof combines durable ingestion, governance provenance,
+classification-filtered retrieval, and bounded context assembly. The proof
+asserts that a principal receives no records from another tenant and no facts
+above the requested classification.

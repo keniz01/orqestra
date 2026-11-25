@@ -5,9 +5,11 @@ import pytest
 from execution_kernel import Principal
 from task_runtime import (
     InMemoryTaskStore,
+    InMemoryTaskRepository,
     InvalidTaskTransition,
     PlanStep,
     TaskConflict,
+    TaskRepository,
     TaskScopeError,
     TaskStatus,
 )
@@ -94,3 +96,10 @@ def test_task_store_emits_governance_events_for_state_changes():
         "task.transitioned",
     ]
     assert all(event.org_id == "org-1" for event in events)
+
+
+def test_in_memory_task_adapter_satisfies_repository_contract():
+    store = InMemoryTaskRepository()
+
+    assert isinstance(store, TaskRepository)
+    assert isinstance(store, InMemoryTaskStore)

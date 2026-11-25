@@ -3,15 +3,30 @@
 from .contracts import (
     AuditEvent,
     CapabilityRequest,
+    CancellationToken,
     DelegationContext,
+    ExecutionContext,
+    ExecutionCancelled,
+    ExecutionTimedOut,
     Principal,
     QueryPlan,
     QueryResult,
     TenantBinding,
 )
 from .capabilities import CapabilityError, CapabilityRegistry, CapabilitySpec
-from .engine import ApprovalChecker, ExecutionKernel, ExecutionLimits
-from .policy import DecisionProvenance, PolicyDecision, PolicyEvaluator, RulePolicyEvaluator
+from .engine import (
+    ApprovalChecker,
+    CancellableQueryExecutor,
+    ExecutionKernel,
+    ExecutionLimits,
+    QueryExecutor,
+)
+from .policy import (
+    DecisionProvenance,
+    PolicyDecision,
+    PolicyEvaluator,
+    RulePolicyEvaluator,
+)
 from .policy_service import (
     PolicyDecisionRequest,
     PolicyDecisionResponse,
@@ -30,7 +45,11 @@ __all__ = [
     "CapabilityRegistry",
     "CapabilitySpec",
     "DecisionProvenance",
+    "CancellationToken",
+    "CancellableQueryExecutor",
     "DelegationContext",
+    "ExecutionContext",
+    "ExecutionCancelled",
     "ExecutionKernel",
     "ExecutionLimits",
     "PolicyDecision",
@@ -43,10 +62,12 @@ __all__ = [
     "Principal",
     "QueryPlan",
     "QueryResult",
+    "QueryExecutor",
     "RulePolicyEvaluator",
     "SqlValidationError",
     "TenantBinding",
     "TenantBindingRegistry",
     "TenantResolutionError",
+    "ExecutionTimedOut",
     "validate_read_query",
 ]

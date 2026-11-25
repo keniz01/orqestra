@@ -30,6 +30,18 @@ class QueryExecutor(Protocol):
         ...
 
 
+class ApprovalChecker(Protocol):
+    def is_approved(
+        self,
+        principal: Principal,
+        approval_id: str,
+        *,
+        task_id: str,
+        capability: str,
+    ) -> bool:
+        ...
+
+
 @dataclass(frozen=True, slots=True)
 class ExecutionLimits:
     max_rows: int = 5_000
@@ -55,6 +67,7 @@ class ExecutionKernel:
         executor: QueryExecutor,
         audit_sink: Callable[[AuditEvent], None],
         capabilities: CapabilityRegistry | None = None,
+        approval_checker: ApprovalChecker | None = None,
         limits: ExecutionLimits | None = None,
     ) -> None:
         self._tenants = tenants
@@ -70,6 +83,7 @@ class ExecutionKernel:
                 ),
             )
         )
+        self._approval_checker = approval_checker
         self._limits = limits or ExecutionLimits()
 
     def execute(
@@ -103,12 +117,75 @@ class ExecutionKernel:
                 )
             )
             raise PermissionError("Delegation does not authorize this capability.")
+        effective_task_id = delegation.task_id if delegation is not None else task_id
+        agent_id = delegation.agent_id if delegation is not None else None
         if capability.requires_approval and (
             delegation is None or delegation.approval_id is None
         ):
+            self._audit_sink(
+                AuditEvent(
+                    event_type="capability_decision",
+                    user_id=principal.user_id,
+                    org_id=principal.org_id,
+                    capability=self.READ_CAPABILITY,
+                    database_id=database_id,
+                    decision="deny",
+                    reason="Capability approval is required.",
+                    query_hash=raw_query_hash,
+                    task_id=effective_task_id,
+                    agent_id=agent_id,
+                )
+            )
             raise PermissionError("Capability approval is required.")
-        effective_task_id = delegation.task_id if delegation is not None else task_id
-        agent_id = delegation.agent_id if delegation is not None else None
+        if capability.requires_approval:
+            approval_id = delegation.approval_id if delegation is not None else None
+            if (
+                self._approval_checker is None
+                or approval_id is None
+                or effective_task_id is None
+            ):
+                reason = "Capability approval cannot be validated."
+                self._audit_sink(
+                    AuditEvent(
+                        event_type="capability_decision",
+                        user_id=principal.user_id,
+                        org_id=principal.org_id,
+                        capability=self.READ_CAPABILITY,
+                        database_id=database_id,
+                        decision="deny",
+                        reason=reason,
+                        query_hash=raw_query_hash,
+                        task_id=effective_task_id,
+                        agent_id=agent_id,
+                    )
+                )
+                raise PermissionError(reason)
+            try:
+                approved = self._approval_checker.is_approved(
+                    principal,
+                    approval_id,
+                    task_id=effective_task_id,
+                    capability=self.READ_CAPABILITY,
+                )
+            except (LookupError, PermissionError):
+                approved = False
+            if not approved:
+                reason = "Capability approval is invalid, expired, or out of scope."
+                self._audit_sink(
+                    AuditEvent(
+                        event_type="capability_decision",
+                        user_id=principal.user_id,
+                        org_id=principal.org_id,
+                        capability=self.READ_CAPABILITY,
+                        database_id=database_id,
+                        decision="deny",
+                        reason=reason,
+                        query_hash=raw_query_hash,
+                        task_id=effective_task_id,
+                        agent_id=agent_id,
+                    )
+                )
+                raise PermissionError(reason)
         try:
             binding = self._tenants.resolve(principal, database_id)
         except TenantResolutionError as exc:

@@ -10,13 +10,14 @@ from .contracts import (
     TenantBinding,
 )
 from .capabilities import CapabilityError, CapabilityRegistry, CapabilitySpec
-from .engine import ExecutionKernel, ExecutionLimits
+from .engine import ApprovalChecker, ExecutionKernel, ExecutionLimits
 from .policy import PolicyDecision, PolicyEvaluator, RulePolicyEvaluator
 from .sql import SqlValidationError, validate_read_query
 from .tenant import TenantBindingRegistry, TenantResolutionError
 
 __all__ = [
     "AuditEvent",
+    "ApprovalChecker",
     "CapabilityRequest",
     "CapabilityError",
     "CapabilityRegistry",

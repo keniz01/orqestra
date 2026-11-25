@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from approval_plane import ApprovalDecision, ApprovalStore
 from execution_kernel import (
     CapabilityRegistry,
     CapabilitySpec,
@@ -74,6 +75,49 @@ def make_kernel(audit_events, executor=None):
         ),
         executor,
     )
+
+
+def make_approval_kernel(audit_events, approval_checker=None):
+    executor = FakeExecutor()
+    tenants = TenantBindingRegistry(
+        {
+            ("org-1", "analytics"): TenantBinding(
+                org_id="org-1",
+                database_id="analytics",
+                connector_id="postgres-primary",
+                target="server-owned-target",
+            )
+        }
+    )
+    policy = RulePolicyEvaluator(
+        allow_rules=(
+            {
+                "capability": "data.execute_read_query",
+                "org_id": "org-1",
+                "roles": ("viewer",),
+                "database_id": "analytics",
+                "tables": ("customers",),
+            },
+        )
+    )
+    kernel = ExecutionKernel(
+        tenants=tenants,
+        policy=policy,
+        executor=executor,
+        audit_sink=audit_events.append,
+        capabilities=CapabilityRegistry(
+            (
+                CapabilitySpec(
+                    name="data.execute_read_query",
+                    description="Read data",
+                    read_only=True,
+                    requires_approval=True,
+                ),
+            )
+        ),
+        approval_checker=approval_checker,
+    )
+    return kernel, executor
 
 
 def test_kernel_resolves_tenant_authorizes_masks_and_bounds_results():
@@ -153,6 +197,121 @@ def test_expired_delegation_cannot_execute():
         )
 
     assert executor.calls == []
+
+
+def test_approval_required_capability_validates_approval_before_execution():
+    events = []
+    approvals = ApprovalStore()
+    kernel, executor = make_approval_kernel(events, approvals)
+    request = approvals.create(
+        make_principal(),
+        task_id="task-42",
+        capability="data.execute_read_query",
+        reason="Export analysis.",
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+    )
+    approvals.decide(
+        Principal(user_id="approver", org_id="org-1"),
+        request.approval_id,
+        ApprovalDecision.APPROVE,
+        expected_version=request.version,
+    )
+    delegation = DelegationContext(
+        agent_id="analyst-agent",
+        task_id="task-42",
+        allowed_capabilities=frozenset({"data.execute_read_query"}),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        approval_id=request.approval_id,
+    )
+
+    result = kernel.execute(
+        principal=make_principal(),
+        database_id="analytics",
+        plan=QueryPlan("SELECT id FROM customers"),
+        delegation=delegation,
+    )
+
+    assert result.rows
+    assert executor.calls
+
+
+def test_approval_required_capability_fails_closed_without_checker():
+    events = []
+    approvals = ApprovalStore()
+    kernel, executor = make_approval_kernel(events)
+    request = approvals.create(
+        make_principal(),
+        task_id="task-42",
+        capability="data.execute_read_query",
+        reason="Export analysis.",
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+    )
+    delegation = DelegationContext(
+        agent_id="analyst-agent",
+        task_id="task-42",
+        allowed_capabilities=frozenset({"data.execute_read_query"}),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        approval_id=request.approval_id,
+    )
+
+    with pytest.raises(PermissionError, match="cannot be validated"):
+        kernel.execute(
+            principal=make_principal(),
+            database_id="analytics",
+            plan=QueryPlan("SELECT id FROM customers"),
+            delegation=delegation,
+        )
+
+    assert executor.calls == []
+    assert events[-1].decision == "deny"
+
+
+@pytest.mark.parametrize(
+    "task_id, approval_id, expected_message",
+    [
+        ("task-42", None, "approval is required"),
+        ("wrong-task", "approved", "invalid, expired, or out of scope"),
+    ],
+)
+def test_approval_required_capability_denies_missing_or_mismatched_approval(
+    task_id, approval_id, expected_message
+):
+    events = []
+    approvals = ApprovalStore()
+    kernel, executor = make_approval_kernel(events, approvals)
+    if approval_id == "approved":
+        request = approvals.create(
+            make_principal(),
+            task_id="task-42",
+            capability="data.execute_read_query",
+            reason="Export analysis.",
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        )
+        approvals.decide(
+            Principal(user_id="approver", org_id="org-1"),
+            request.approval_id,
+            ApprovalDecision.APPROVE,
+            expected_version=request.version,
+        )
+        approval_id = request.approval_id
+    delegation = DelegationContext(
+        agent_id="analyst-agent",
+        task_id=task_id,
+        allowed_capabilities=frozenset({"data.execute_read_query"}),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        approval_id=approval_id,
+    )
+
+    with pytest.raises(PermissionError, match=expected_message):
+        kernel.execute(
+            principal=make_principal(),
+            database_id="analytics",
+            plan=QueryPlan("SELECT id FROM customers"),
+            delegation=delegation,
+        )
+
+    assert executor.calls == []
+    assert events[-1].decision == "deny"
 
 
 def test_registry_rejects_duplicate_capabilities():

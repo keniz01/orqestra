@@ -17,9 +17,13 @@ foundations include:
 - tenant-scoped task and plan state transitions;
 - explicit tenant-scoped approval requests with separation of duties and expiry;
 - append-only governance events with idempotent, tenant-scoped ledger reads.
+- formal task, approval, and governance repository protocols with in-memory
+  reference adapters.
 
 The architecture and implementation boundaries are documented in
 [`docs/ai-native-platform-index.md`](docs/ai-native-platform-index.md).
+Persistence boundaries are documented in
+[`docs/durable-control-plane-repositories.md`](docs/durable-control-plane-repositories.md).
 
 ## Development
 

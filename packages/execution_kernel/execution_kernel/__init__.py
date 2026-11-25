@@ -11,7 +11,14 @@ from .contracts import (
 )
 from .capabilities import CapabilityError, CapabilityRegistry, CapabilitySpec
 from .engine import ApprovalChecker, ExecutionKernel, ExecutionLimits
-from .policy import PolicyDecision, PolicyEvaluator, RulePolicyEvaluator
+from .policy import DecisionProvenance, PolicyDecision, PolicyEvaluator, RulePolicyEvaluator
+from .policy_service import (
+    PolicyDecisionRequest,
+    PolicyDecisionResponse,
+    PolicyService,
+    PolicyServiceAdapter,
+    ReferencePolicyServiceAdapter,
+)
 from .sql import SqlValidationError, validate_read_query
 from .tenant import TenantBindingRegistry, TenantResolutionError
 
@@ -22,11 +29,17 @@ __all__ = [
     "CapabilityError",
     "CapabilityRegistry",
     "CapabilitySpec",
+    "DecisionProvenance",
     "DelegationContext",
     "ExecutionKernel",
     "ExecutionLimits",
     "PolicyDecision",
+    "PolicyDecisionRequest",
+    "PolicyDecisionResponse",
     "PolicyEvaluator",
+    "PolicyService",
+    "PolicyServiceAdapter",
+    "ReferencePolicyServiceAdapter",
     "Principal",
     "QueryPlan",
     "QueryResult",

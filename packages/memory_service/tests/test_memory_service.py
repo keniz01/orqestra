@@ -13,6 +13,7 @@ from memory_service import (
     MemoryRetention,
     MemoryScope,
     RetentionClass,
+    SQLiteMemoryStore,
 )
 
 
@@ -111,3 +112,16 @@ def test_retrieval_is_bounded_and_excludes_expired_records():
     }
     with pytest.raises(ValueError, match="between"):
         store.retrieve(principal("reader"), limit=3)
+
+
+def test_sqlite_memory_store_preserves_tenant_scope_after_reopen(tmp_path):
+    database = tmp_path / "memory.sqlite"
+    first_store = SQLiteMemoryStore(str(database))
+    tenant_memory = first_store.write(principal("writer"), record())
+    first_store.close()
+
+    second_store = SQLiteMemoryStore(str(database))
+    assert second_store.get(principal("reader"), tenant_memory.memory_id) == tenant_memory
+    with pytest.raises(MemoryAuthorizationError):
+        second_store.get(principal("other", "org-2"), tenant_memory.memory_id)
+    second_store.close()

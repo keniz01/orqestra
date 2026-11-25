@@ -6,7 +6,7 @@ import pytest
 
 from execution_kernel import Principal
 from governed_orchestrator import GovernedReadOrchestrator
-from governance import InMemoryGovernanceLedger
+from governance import InMemoryGovernanceLedger, SQLiteGovernanceLedger
 from read_workflows import (
     CapabilityResultState,
     Evidence,
@@ -15,11 +15,15 @@ from read_workflows import (
     ReadWorkflowPlan,
     WorkflowResultState,
 )
-from task_runtime import InMemoryTaskStore, TaskStatus
+from task_runtime import InMemoryTaskStore, SQLiteTaskRepository, TaskStatus
 from workflow_reliability import (
     InMemoryCancellationStore,
     InMemoryCheckpointStore,
     InMemoryLeaseStore,
+    SQLiteCancellationStore,
+    SQLiteCheckpointStore,
+    SQLiteLeaseStore,
+    SQLiteReliabilityStore,
 )
 
 
@@ -199,3 +203,63 @@ def test_resume_skips_checkpointed_steps_after_interruption():
 
     assert resumed.result.state is WorkflowResultState.COMPLETED
     assert calls == ["revenue", "cost", "cost"]
+
+
+def test_durable_orchestrator_resumes_after_process_restart(tmp_path):
+    database = str(tmp_path / "orchestrator.sqlite")
+    plan = ReadWorkflowPlan(
+        goal="Find revenue and cost",
+        steps=(
+            ReadPlanStep("revenue", "catalog.metric", {"metric": "revenue"}),
+            ReadPlanStep("cost", "catalog.metric", {"metric": "cost"}),
+        ),
+    )
+    calls = []
+
+    class FirstExecutor:
+        def execute(self, principal, task_id, step):
+            calls.append(step.step_id)
+            if step.step_id == "cost":
+                raise KeyboardInterrupt
+            return success(step)
+
+    reliability = SQLiteReliabilityStore(database)
+    tasks = SQLiteTaskRepository(database)
+    first = GovernedReadOrchestrator(
+        tasks=tasks,
+        leases=SQLiteLeaseStore(reliability),
+        checkpoints=SQLiteCheckpointStore(reliability),
+        cancellations=SQLiteCancellationStore(reliability),
+        ledger=SQLiteGovernanceLedger(database),
+        executor=FirstExecutor(),
+        lease_ttl=timedelta(seconds=1),
+        clock=lambda: NOW,
+    )
+    with pytest.raises(KeyboardInterrupt):
+        first.run(PRINCIPAL, plan)
+    task_id = tasks._connection.execute("SELECT task_id FROM tasks").fetchone()["task_id"]
+    reliability.close()
+    tasks.close()
+
+    class SecondExecutor:
+        def execute(self, principal, task_id, step):
+            calls.append(step.step_id)
+            return success(step)
+
+    restarted_reliability = SQLiteReliabilityStore(database)
+    restarted_tasks = SQLiteTaskRepository(database)
+    resumed = GovernedReadOrchestrator(
+        tasks=restarted_tasks,
+        leases=SQLiteLeaseStore(restarted_reliability),
+        checkpoints=SQLiteCheckpointStore(restarted_reliability),
+        cancellations=SQLiteCancellationStore(restarted_reliability),
+        ledger=SQLiteGovernanceLedger(database),
+        executor=SecondExecutor(),
+        lease_ttl=timedelta(minutes=1),
+        clock=lambda: NOW + timedelta(seconds=2),
+    ).resume(PRINCIPAL, plan, task_id)
+
+    assert resumed.result.state is WorkflowResultState.COMPLETED
+    assert calls == ["revenue", "cost", "cost"]
+    restarted_reliability.close()
+    restarted_tasks.close()

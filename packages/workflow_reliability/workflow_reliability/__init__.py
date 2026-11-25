@@ -23,7 +23,12 @@ from .store import (
     WorkflowCancelled,
     retry_attempts,
 )
-from .sqlite_store import SQLiteReliabilityStore
+from .sqlite_store import (
+    SQLiteCancellationStore,
+    SQLiteCheckpointStore,
+    SQLiteLeaseStore,
+    SQLiteReliabilityStore,
+)
 
 __all__ = [
     "Cancellation",
@@ -44,6 +49,9 @@ __all__ = [
     "ReliabilityError",
     "RetryPolicy",
     "SQLiteReliabilityStore",
+    "SQLiteLeaseStore",
+    "SQLiteCheckpointStore",
+    "SQLiteCancellationStore",
     "WorkflowCancelled",
     "retry_attempts",
 ]

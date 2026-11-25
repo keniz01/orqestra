@@ -397,3 +397,104 @@ class SQLiteReliabilityStore:
             state=json.loads(row["state_json"]),
             created_at=_datetime(row["created_at"]),
         )
+
+
+class SQLiteLeaseStore:
+    """Orchestrator-compatible durable lease adapter."""
+
+    def __init__(self, store: SQLiteReliabilityStore) -> None:
+        self._store = store
+
+    def get(self, workflow_id: str, *, now: datetime | None = None) -> Lease | None:
+        return self._store.get_lease(workflow_id, now=now)
+
+    def acquire(
+        self,
+        workflow_id: str,
+        owner_id: str,
+        ttl: timedelta,
+        *,
+        now: datetime | None = None,
+    ) -> Lease:
+        return self._store.acquire_lease(workflow_id, owner_id, ttl, now=now)
+
+    def renew(
+        self,
+        workflow_id: str,
+        lease_id: str,
+        owner_id: str,
+        ttl: timedelta,
+        *,
+        now: datetime | None = None,
+    ) -> Lease:
+        return self._store.renew_lease(
+            workflow_id,
+            lease_id,
+            owner_id,
+            ttl,
+            now=now,
+        )
+
+    def release(
+        self,
+        workflow_id: str,
+        lease_id: str,
+        owner_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> None:
+        self._store.release_lease(
+            workflow_id,
+            lease_id,
+            owner_id,
+            now=now,
+        )
+
+
+class SQLiteCheckpointStore:
+    """Orchestrator-compatible durable checkpoint adapter."""
+
+    def __init__(self, store: SQLiteReliabilityStore) -> None:
+        self._store = store
+
+    def latest(self, workflow_id: str) -> Checkpoint | None:
+        return self._store.latest_checkpoint(workflow_id)
+
+    def save(
+        self,
+        workflow_id: str,
+        state: Mapping[str, Any],
+        *,
+        expected_version: int = 0,
+        checkpoint_id: str | None = None,
+        now: datetime | None = None,
+    ) -> Checkpoint:
+        return self._store.save_checkpoint(
+            workflow_id,
+            state,
+            expected_version=expected_version,
+            checkpoint_id=checkpoint_id,
+            now=now,
+        )
+
+
+class SQLiteCancellationStore:
+    """Orchestrator-compatible durable cancellation adapter."""
+
+    def __init__(self, store: SQLiteReliabilityStore) -> None:
+        self._store = store
+
+    def request(
+        self,
+        workflow_id: str,
+        reason: str = "Cancellation requested.",
+        *,
+        now: datetime | None = None,
+    ) -> Cancellation:
+        return self._store.request_cancellation(workflow_id, reason, now=now)
+
+    def get(self, workflow_id: str) -> Cancellation | None:
+        return self._store.get_cancellation(workflow_id)
+
+    def raise_if_cancelled(self, workflow_id: str) -> None:
+        self._store.raise_if_cancelled(workflow_id)

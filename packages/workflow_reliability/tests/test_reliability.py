@@ -14,6 +14,7 @@ from workflow_reliability import (
     LeaseConflict,
     LeaseOwnershipError,
     RetryPolicy,
+    SQLiteReliabilityStore,
     WorkflowCancelled,
 )
 
@@ -107,3 +108,35 @@ def test_checkpoint_versions_require_current_version():
     assert store.get("workflow-1", version=2).state == {"step": 2}
     with pytest.raises(CheckpointConflict):
         store.save("workflow-1", {"step": 3}, expected_version=first.version)
+
+
+def test_sqlite_reliability_state_survives_reopen(tmp_path):
+    database = tmp_path / "workflow-state.sqlite"
+    first_store = SQLiteReliabilityStore(str(database))
+    lease = first_store.acquire_lease(
+        "workflow-1",
+        "worker-1",
+        timedelta(minutes=1),
+        now=NOW,
+    )
+    first_store.request_cancellation("workflow-2", now=NOW)
+    checkpoint = first_store.save_checkpoint(
+        "workflow-1",
+        {"completed_steps": ["step-1"]},
+        now=NOW,
+    )
+    assert first_store.execute_idempotent("request-1", "hash-1", lambda: {"ok": True}) == {
+        "ok": True
+    }
+    first_store.close()
+
+    second_store = SQLiteReliabilityStore(str(database))
+    assert second_store.get_lease("workflow-1", now=NOW) == lease
+    assert second_store.get_cancellation("workflow-2") is not None
+    assert second_store.get_checkpoint("workflow-1").state == {
+        "completed_steps": ["step-1"]
+    }
+    assert second_store.execute_idempotent("request-1", "hash-1", lambda: {"ok": False}) == {
+        "ok": True
+    }
+    second_store.close()

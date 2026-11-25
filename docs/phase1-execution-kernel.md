@@ -14,6 +14,8 @@ agent models, and database credentials.
 - time-bounded agent delegation scoped to capabilities and tasks;
 - server-owned `(org_id, database_id)` tenant binding resolution;
 - deny-by-default capability policy evaluator;
+- bounded policy-service request/response adapter with decision provenance,
+  fail-closed failures, and a deterministic reference evaluator;
 - typed `QueryPlan` and bounded `QueryResult` contracts;
 - deterministic `sqlglot` validation for one read-only SELECT/WITH statement;
 - rejection of mutations, comments, multiple statements, forbidden functions,

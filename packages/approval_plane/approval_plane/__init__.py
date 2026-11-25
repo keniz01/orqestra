@@ -3,9 +3,11 @@
 from .models import ApprovalDecision, ApprovalRequest, ApprovalStatus
 from .store import (
     ApprovalConflict,
+    ApprovalRepository,
     ApprovalNotFound,
     ApprovalScopeError,
     ApprovalStore,
+    InMemoryApprovalRepository,
     InvalidApprovalDecision,
 )
 
@@ -14,8 +16,10 @@ __all__ = [
     "ApprovalDecision",
     "ApprovalNotFound",
     "ApprovalRequest",
+    "ApprovalRepository",
     "ApprovalScopeError",
     "ApprovalStatus",
     "ApprovalStore",
+    "InMemoryApprovalRepository",
     "InvalidApprovalDecision",
 ]

@@ -3,9 +3,30 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol
 
 from .contracts import CapabilityRequest, Principal
+
+
+@dataclass(frozen=True, slots=True)
+class DecisionProvenance:
+    """Traceable origin of a policy decision."""
+
+    source: str
+    policy_version: str
+    decision_id: str
+    evaluated_at: datetime
+    tenant_id: str
+
+    def __post_init__(self) -> None:
+        for field_name in ("source", "policy_version", "decision_id", "tenant_id"):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+            object.__setattr__(self, field_name, value.strip())
+        if self.evaluated_at.tzinfo is None:
+            raise ValueError("evaluated_at must include timezone information")
 
 
 @dataclass(frozen=True, slots=True)
@@ -13,6 +34,7 @@ class PolicyDecision:
     allowed: bool
     reason: str
     masked_columns: frozenset[str] = frozenset()
+    provenance: DecisionProvenance | None = None
 
 
 class PolicyEvaluator(Protocol):

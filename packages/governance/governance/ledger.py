@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from execution_kernel import Principal
 
@@ -13,7 +13,10 @@ class LedgerConflict(RuntimeError):
     """Raised when an event ID is reused with different event data."""
 
 
+@runtime_checkable
 class GovernanceLedger(Protocol):
+    """Persistence boundary for append-only governance events."""
+
     def append(self, event: GovernanceEvent) -> None:
         ...
 
@@ -24,6 +27,9 @@ class GovernanceLedger(Protocol):
         task_id: str | None = None,
     ) -> tuple[GovernanceEvent, ...]:
         ...
+
+
+GovernanceRepository = GovernanceLedger
 
 
 class InMemoryGovernanceLedger:
@@ -56,3 +62,6 @@ class InMemoryGovernanceLedger:
             if (event := self._events[event_id]).org_id == principal.org_id
             and (task_id is None or event.task_id == task_id)
         )
+
+
+InMemoryGovernanceRepository = InMemoryGovernanceLedger

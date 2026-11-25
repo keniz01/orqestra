@@ -13,11 +13,28 @@ from .models import (
     Table,
     TableMetadata,
 )
+from .repository import (
+    CatalogRepository,
+    MetadataCollector,
+    MetadataIngestionService,
+    SQLiteSemanticCatalog,
+)
+from .semantic_models import (
+    BusinessMetric,
+    LineageEdge,
+    SemanticEntity,
+    SemanticRelationship,
+)
+from .semantic_repository import SemanticFactRepository, SQLiteSemanticFacts
+from .quality import QualityMetadata, QualityStatus
+from .retrieval import EmbeddingProvider, HashEmbeddingProvider, SQLiteEmbeddingIndex
 
 __all__ = [
     "CatalogConflict",
     "CatalogPolicy",
     "CatalogScopeError",
+    "CatalogRepository",
+    "BusinessMetric",
     "Classification",
     "Column",
     "ColumnMetadata",
@@ -25,8 +42,21 @@ __all__ = [
     "DataSourceMetadata",
     "Freshness",
     "InMemorySemanticCatalog",
+    "MetadataCollector",
+    "MetadataIngestionService",
     "Provenance",
     "SourceKind",
+    "SemanticEntity",
+    "SemanticFactRepository",
+    "SemanticRelationship",
+    "SQLiteSemanticFacts",
+    "SQLiteSemanticCatalog",
+    "LineageEdge",
+    "EmbeddingProvider",
+    "HashEmbeddingProvider",
+    "QualityMetadata",
+    "QualityStatus",
+    "SQLiteEmbeddingIndex",
     "Table",
     "TableMetadata",
 ]

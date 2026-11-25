@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from typing import Protocol
 
 from execution_kernel import Principal
+from governance import GovernanceEvent, GovernanceLedger
 
 from .catalog import CatalogPolicy, CatalogScopeError
 from .models import (
@@ -54,8 +55,13 @@ class MetadataCollector(Protocol):
 class MetadataIngestionService:
     """Persist metadata collected for the trusted tenant principal."""
 
-    def __init__(self, repository: CatalogRepository) -> None:
+    def __init__(
+        self,
+        repository: CatalogRepository,
+        ledger: GovernanceLedger | None = None,
+    ) -> None:
         self._repository = repository
+        self._ledger = ledger
 
     def ingest(
         self,
@@ -66,8 +72,39 @@ class MetadataIngestionService:
         if any(source.tenant_id != principal.org_id for source in sources):
             raise CatalogScopeError("collector returned metadata for another tenant")
         for source in sources:
+            _require_provenance(source)
             self._repository.upsert(source)
+            if self._ledger is not None:
+                self._ledger.append(
+                    GovernanceEvent(
+                        event_id=f"catalog.ingested:{source.tenant_id}:{source.source_id}",
+                        org_id=source.tenant_id,
+                        event_type="catalog.ingested",
+                        actor_user_id=principal.user_id,
+                        decision="allow",
+                        reason="Catalog metadata ingested.",
+                        capability="semantic_catalog.ingest",
+                        payload={
+                            "source_id": source.source_id,
+                            "source_kind": source.kind.value,
+                            "source_system": source.provenance.source_system,
+                            "source_object": source.provenance.source_object,
+                            "collector": source.provenance.collector,
+                        },
+                    )
+                )
         return sources
+
+
+def _require_provenance(source: DataSourceMetadata) -> None:
+    if source.provenance is None:
+        raise ValueError("source provenance is required for ingestion")
+    for table in source.tables:
+        if table.provenance is None:
+            raise ValueError("table provenance is required for ingestion")
+        for column in table.columns:
+            if column.provenance is None:
+                raise ValueError("column provenance is required for ingestion")
 
 
 def _timestamp(value: datetime) -> str:

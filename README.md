@@ -15,6 +15,7 @@ foundations include:
 - policy-driven masking and result row/byte budgets;
 - time-bounded agent delegation with task and agent audit identity;
 - tenant-scoped task and plan state transitions.
+- explicit tenant-scoped approval requests with separation of duties and expiry.
 
 The architecture and implementation boundaries are documented in
 [`docs/ai-native-platform-index.md`](docs/ai-native-platform-index.md).

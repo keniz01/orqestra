@@ -11,8 +11,10 @@ dependencies = [
 pythonpath = [
     "packages/execution_kernel",
     "packages/task_runtime",
+    "packages/approval_plane",
 ]
 testpaths = [
     "packages/execution_kernel/tests",
     "packages/task_runtime/tests",
+    "packages/approval_plane/tests",
 ]

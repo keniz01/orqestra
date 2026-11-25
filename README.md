@@ -17,6 +17,8 @@ foundations include:
 - tenant-scoped task and plan state transitions;
 - explicit tenant-scoped approval requests with separation of duties and expiry;
 - append-only governance events with idempotent, tenant-scoped ledger reads.
+- bounded, tenant-scoped context assembly from policy-filtered catalog facts
+  and authorized memory records.
 - formal task, approval, and governance repository protocols with in-memory
   reference adapters.
 

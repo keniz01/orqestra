@@ -1,0 +1,16 @@
+[project]
+name = "orqestra"
+version = "0.1.0"
+description = "AI-native autonomous data platform foundations"
+requires-python = ">=3.12"
+dependencies = [
+    "sqlglot>=26,<27",
+]
+
+[tool.pytest.ini_options]
+pythonpath = [
+    "packages/execution_kernel",
+]
+testpaths = [
+    "packages/execution_kernel/tests",
+]

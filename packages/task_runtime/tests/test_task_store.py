@@ -12,6 +12,7 @@ from task_runtime import (
     TaskRepository,
     TaskScopeError,
     TaskStatus,
+    SQLiteTaskRepository,
 )
 
 
@@ -103,3 +104,28 @@ def test_in_memory_task_adapter_satisfies_repository_contract():
 
     assert isinstance(store, TaskRepository)
     assert isinstance(store, InMemoryTaskStore)
+
+
+def test_sqlite_task_repository_preserves_state_and_scope_after_reopen(tmp_path):
+    database = tmp_path / "tasks.sqlite"
+    first_store = SQLiteTaskRepository(str(database))
+    task = first_store.create(
+        principal(),
+        "Investigate customer retention",
+        [PlanStep("step-1", "data.execute_read_query")],
+    )
+    running = first_store.transition(
+        principal(),
+        task.task_id,
+        TaskStatus.RUNNING,
+        expected_version=task.version,
+    )
+    first_store.close()
+
+    second_store = SQLiteTaskRepository(str(database))
+    restored = second_store.get(principal(), task.task_id)
+    assert restored.status is TaskStatus.RUNNING
+    assert restored.version == running.version
+    with pytest.raises(TaskScopeError):
+        second_store.get(principal(user_id="other-user"), task.task_id)
+    second_store.close()

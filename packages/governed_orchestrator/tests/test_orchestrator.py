@@ -9,11 +9,13 @@ from governed_orchestrator import GovernedReadOrchestrator
 from governance import InMemoryGovernanceLedger, SQLiteGovernanceLedger
 from read_workflows import (
     CapabilityResultState,
+    CritiqueState,
     Evidence,
     GovernedCapabilityResult,
     ReadPlanStep,
     ReadWorkflowPlan,
     WorkflowResultState,
+    WorkflowCritique,
 )
 from task_runtime import InMemoryTaskStore, SQLiteTaskRepository, TaskStatus
 from workflow_reliability import (
@@ -35,7 +37,7 @@ PLAN = ReadWorkflowPlan(
 )
 
 
-def build(executor, *, clock=lambda: NOW, ttl=timedelta(minutes=5)):
+def build(executor, *, clock=lambda: NOW, ttl=timedelta(minutes=5), critic=None):
     ledger = InMemoryGovernanceLedger()
     tasks = InMemoryTaskStore()
     orchestrator = GovernedReadOrchestrator(
@@ -45,6 +47,7 @@ def build(executor, *, clock=lambda: NOW, ttl=timedelta(minutes=5)):
         cancellations=InMemoryCancellationStore(),
         ledger=ledger,
         executor=executor,
+        critic=critic,
         owner_id="worker-1",
         lease_ttl=ttl,
         clock=clock,
@@ -72,6 +75,10 @@ def test_happy_path_creates_task_checkpoints_and_emits_events():
 
     assert outcome.task.status is TaskStatus.COMPLETED
     assert outcome.result.state is WorkflowResultState.COMPLETED
+    assert outcome.result.trace_id == outcome.task.task_id
+    assert outcome.report.trace_id == outcome.task.task_id
+    assert outcome.result.critique is not None
+    assert outcome.result.critique.state is CritiqueState.ACCEPTED
     assert outcome.checkpoint_version == 3
     assert {event.event_type for event in ledger.events_for(PRINCIPAL, task_id=outcome.task.task_id)} >= {
         "workflow.started",
@@ -165,6 +172,26 @@ def test_missing_evidence_is_partial_and_not_completed():
 
     assert outcome.result.state is WorkflowResultState.PARTIAL
     assert outcome.task.status is TaskStatus.FAILED
+
+
+def test_result_critic_can_require_review():
+    class Critic:
+        def critique(self, plan, result):
+            return WorkflowCritique(
+                state=CritiqueState.NEEDS_REVIEW,
+                reason="An analyst must review this result.",
+            )
+
+    orchestrator, _, _ = build(
+        type("Executor", (), {"execute": lambda self, principal, task_id, step: success(step)})(),
+        critic=Critic(),
+    )
+
+    outcome = orchestrator.run(PRINCIPAL, PLAN)
+
+    assert outcome.result.state is WorkflowResultState.PARTIAL
+    assert outcome.result.critique.state is CritiqueState.NEEDS_REVIEW
+    assert outcome.report.citations == ("metric:revenue",)
 
 
 def test_resume_skips_checkpointed_steps_after_interruption():

@@ -35,6 +35,12 @@ class InMemoryReadWorkflowRunner:
                 state=WorkflowResultState.BLOCKED,
                 reason="Results must exactly match the planned steps.",
             )
+        evidence_count = sum(len(result.evidence) for result in results)
+        if evidence_count > plan.budget.max_evidence:
+            return ReadWorkflowResult(
+                state=WorkflowResultState.PARTIAL,
+                reason="Capability evidence exceeds the workflow budget.",
+            )
         if any(
             by_step[step_id].capability != step.capability
             for step_id, step in expected.items()
@@ -71,6 +77,11 @@ class InMemoryReadWorkflowRunner:
                 values=values,
                 evidence=evidence,
                 reason=f"Capability result was {failed.state.value}.",
+                query_hashes=tuple(
+                    result.query_hash
+                    for result in results
+                    if result.query_hash is not None
+                ),
             )
         if any(result.confidence is None for result in results):
             return ReadWorkflowResult(
@@ -78,6 +89,11 @@ class InMemoryReadWorkflowRunner:
                 values=values,
                 evidence=evidence,
                 reason="Every capability result must provide confidence to complete.",
+                query_hashes=tuple(
+                    result.query_hash
+                    for result in results
+                    if result.query_hash is not None
+                ),
             )
         confidence = min(result.confidence for result in results)
         if not evidence:
@@ -86,10 +102,20 @@ class InMemoryReadWorkflowRunner:
                 values=values,
                 confidence=confidence,
                 reason="At least one provenance record is required to complete.",
+                query_hashes=tuple(
+                    result.query_hash
+                    for result in results
+                    if result.query_hash is not None
+                ),
             )
         return ReadWorkflowResult(
             state=WorkflowResultState.COMPLETED,
             values=values,
             evidence=evidence,
             confidence=confidence,
+            query_hashes=tuple(
+                result.query_hash
+                for result in results
+                if result.query_hash is not None
+            ),
         )

@@ -5,18 +5,23 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
+from dataclasses import replace
 from typing import Protocol
 
 from execution_kernel import Principal
 from governance import GovernanceEvent, GovernanceLedger
 from read_workflows import (
     CapabilityResultState,
+    CritiqueState,
     Evidence,
     GovernedCapabilityResult,
     InMemoryReadWorkflowRunner,
     ReadPlanStep,
     ReadWorkflowPlan,
+    ReadWorkflowReport,
     ReadWorkflowResult,
+    ReadWorkflowCritic,
+    WorkflowCritique,
     WorkflowResultState,
 )
 from task_runtime import PlanStep, Task, TaskRepository, TaskStatus
@@ -50,6 +55,7 @@ class GovernedReadOutcome:
     result: ReadWorkflowResult
     checkpoint_version: int
     lease_id: str
+    report: ReadWorkflowReport | None = None
 
 
 class GovernedReadOrchestrator:
@@ -65,6 +71,7 @@ class GovernedReadOrchestrator:
         ledger: GovernanceLedger,
         executor: GovernedCapabilityExecutor,
         runner: InMemoryReadWorkflowRunner | None = None,
+        critic: ReadWorkflowCritic | None = None,
         owner_id: str = "governed-read-orchestrator",
         lease_ttl: timedelta = timedelta(minutes=5),
         clock: Callable[[], datetime] | None = None,
@@ -76,6 +83,7 @@ class GovernedReadOrchestrator:
         self._ledger = ledger
         self._executor = executor
         self._runner = runner or InMemoryReadWorkflowRunner()
+        self._critic = critic
         self._owner_id = owner_id
         self._lease_ttl = lease_ttl
         self._clock = clock or (lambda: datetime.now(timezone.utc))
@@ -192,7 +200,7 @@ class GovernedReadOrchestrator:
                 )
                 self._ensure_lease(lease)
             self._cancellations.raise_if_cancelled(task.task_id)
-            result = self._runner.run(plan, results)
+            result = self._review(plan, self._runner.run(plan, results))
         except WorkflowCancelled as exc:
             result = ReadWorkflowResult(
                 state=WorkflowResultState.CANCELLED,
@@ -202,7 +210,7 @@ class GovernedReadOrchestrator:
                 principal, task, TaskStatus.CANCELLED, result, checkpoint
             )
             self._release(lease)
-            return GovernedReadOutcome(task, result, checkpoint.version, lease.lease_id)
+            return self._outcome(task, result, checkpoint, lease.lease_id, plan)
 
         except (LookupError, PermissionError) as exc:
             result = ReadWorkflowResult(
@@ -213,7 +221,7 @@ class GovernedReadOrchestrator:
                 principal, task, TaskStatus.FAILED, result, checkpoint
             )
             self._release(lease)
-            return GovernedReadOutcome(task, result, checkpoint.version, lease.lease_id)
+            return self._outcome(task, result, checkpoint, lease.lease_id, plan)
 
         task_status = (
             TaskStatus.COMPLETED
@@ -224,7 +232,7 @@ class GovernedReadOrchestrator:
             principal, task, task_status, result, checkpoint
         )
         self._release(lease)
-        return GovernedReadOutcome(task, result, checkpoint.version, lease.lease_id)
+        return self._outcome(task, result, checkpoint, lease.lease_id, plan)
 
     def resume(
         self,
@@ -286,7 +294,7 @@ class GovernedReadOrchestrator:
                     expected_version=checkpoint.version,
                     now=self._now(),
                 )
-            result = self._runner.run(plan, results)
+            result = self._review(plan, self._runner.run(plan, results))
         except WorkflowCancelled as exc:
             result = ReadWorkflowResult(
                 state=WorkflowResultState.CANCELLED,
@@ -296,7 +304,7 @@ class GovernedReadOrchestrator:
                 principal, task, TaskStatus.CANCELLED, result, checkpoint
             )
             self._release(lease)
-            return GovernedReadOutcome(task, result, checkpoint.version, lease.lease_id)
+            return self._outcome(task, result, checkpoint, lease.lease_id, plan)
         except (LookupError, PermissionError) as exc:
             result = ReadWorkflowResult(
                 state=WorkflowResultState.FAILED,
@@ -306,7 +314,7 @@ class GovernedReadOrchestrator:
                 principal, task, TaskStatus.FAILED, result, checkpoint
             )
             self._release(lease)
-            return GovernedReadOutcome(task, result, checkpoint.version, lease.lease_id)
+            return self._outcome(task, result, checkpoint, lease.lease_id, plan)
 
         task_status = (
             TaskStatus.COMPLETED
@@ -317,7 +325,7 @@ class GovernedReadOrchestrator:
             principal, task, task_status, result, checkpoint
         )
         self._release(lease)
-        return GovernedReadOutcome(task, result, checkpoint.version, lease.lease_id)
+        return self._outcome(task, result, checkpoint, lease.lease_id, plan)
 
     @staticmethod
     def _serialize_result(result: GovernedCapabilityResult) -> dict[str, object]:
@@ -327,6 +335,7 @@ class GovernedReadOrchestrator:
             "state": result.state.value,
             "value": result.value,
             "confidence": result.confidence,
+            "query_hash": result.query_hash,
             "evidence": [
                 {
                     "source": item.source,
@@ -334,6 +343,7 @@ class GovernedReadOrchestrator:
                     "capability": item.capability,
                     "observed_at": item.observed_at.isoformat(),
                     "metadata": dict(item.metadata),
+                    "query_hash": item.query_hash,
                 }
                 for item in result.evidence
             ],
@@ -347,6 +357,7 @@ class GovernedReadOrchestrator:
             state=CapabilityResultState(str(raw["state"])),
             value=raw.get("value"),
             confidence=raw.get("confidence"),
+            query_hash=raw.get("query_hash"),
             evidence=tuple(
                 Evidence(
                     source=str(item["source"]),
@@ -354,9 +365,58 @@ class GovernedReadOrchestrator:
                     capability=str(item["capability"]),
                     observed_at=datetime.fromisoformat(str(item["observed_at"])),
                     metadata=item.get("metadata", {}),
+                    query_hash=item.get("query_hash"),
                 )
                 for item in raw.get("evidence", [])
             ),
+        )
+
+    def _review(
+        self, plan: ReadWorkflowPlan, result: ReadWorkflowResult
+    ) -> ReadWorkflowResult:
+        if result.state is not WorkflowResultState.COMPLETED:
+            return result
+        critique = (
+            self._critic.critique(plan, result)
+            if self._critic is not None
+            else WorkflowCritique(
+                state=CritiqueState.ACCEPTED,
+                reason="Evidence and confidence requirements were satisfied.",
+                confidence=result.confidence,
+            )
+        )
+        if critique.state is CritiqueState.ACCEPTED:
+            return replace(result, critique=critique)
+        state = (
+            WorkflowResultState.BLOCKED
+            if critique.state is CritiqueState.REJECTED
+            else WorkflowResultState.PARTIAL
+        )
+        return replace(
+            result,
+            state=state,
+            critique=critique,
+            reason=critique.reason,
+        )
+
+    @staticmethod
+    def _outcome(
+        task: Task,
+        result: ReadWorkflowResult,
+        checkpoint: Checkpoint,
+        lease_id: str,
+        plan: ReadWorkflowPlan,
+    ) -> GovernedReadOutcome:
+        result = replace(result, trace_id=task.task_id)
+        report = ReadWorkflowReport.from_result(
+            plan.goal, result, trace_id=task.task_id
+        )
+        return GovernedReadOutcome(
+            task,
+            result,
+            checkpoint.version,
+            lease_id,
+            report,
         )
 
     def _finish(

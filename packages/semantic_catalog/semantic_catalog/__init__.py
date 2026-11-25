@@ -26,6 +26,8 @@ from .semantic_models import (
     SemanticRelationship,
 )
 from .semantic_repository import SemanticFactRepository, SQLiteSemanticFacts
+from .quality import QualityMetadata, QualityStatus
+from .retrieval import EmbeddingProvider, HashEmbeddingProvider, SQLiteEmbeddingIndex
 
 __all__ = [
     "CatalogConflict",
@@ -50,6 +52,11 @@ __all__ = [
     "SQLiteSemanticFacts",
     "SQLiteSemanticCatalog",
     "LineageEdge",
+    "EmbeddingProvider",
+    "HashEmbeddingProvider",
+    "QualityMetadata",
+    "QualityStatus",
+    "SQLiteEmbeddingIndex",
     "Table",
     "TableMetadata",
 ]

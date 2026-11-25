@@ -161,3 +161,41 @@ def test_missing_evidence_is_partial_and_not_completed():
 
     assert outcome.result.state is WorkflowResultState.PARTIAL
     assert outcome.task.status is TaskStatus.FAILED
+
+
+def test_resume_skips_checkpointed_steps_after_interruption():
+    plan = ReadWorkflowPlan(
+        goal="Find revenue and cost",
+        steps=(
+            ReadPlanStep("revenue", "catalog.metric", {"metric": "revenue"}),
+            ReadPlanStep("cost", "catalog.metric", {"metric": "cost"}),
+        ),
+    )
+    calls = []
+
+    class Executor:
+        def execute(self, principal, task_id, step):
+            calls.append(step.step_id)
+            if step.step_id == "cost" and calls.count("cost") == 1:
+                raise KeyboardInterrupt
+            return success(step)
+
+    current_time = [NOW]
+    orchestrator, _, tasks = build(
+        Executor(),
+        clock=lambda: current_time[0],
+        ttl=timedelta(seconds=1),
+    )
+    with pytest.raises(KeyboardInterrupt):
+        orchestrator.run(PRINCIPAL, plan)
+
+    task_id = next(iter(tasks._tasks))
+    current_time[0] = NOW + timedelta(seconds=2)
+    resumed = orchestrator.resume(
+        PRINCIPAL,
+        plan,
+        task_id,
+    )
+
+    assert resumed.result.state is WorkflowResultState.COMPLETED
+    assert calls == ["revenue", "cost", "cost"]

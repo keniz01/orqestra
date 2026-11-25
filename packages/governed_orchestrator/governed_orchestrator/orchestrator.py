@@ -11,6 +11,7 @@ from execution_kernel import Principal
 from governance import GovernanceEvent, GovernanceLedger
 from read_workflows import (
     CapabilityResultState,
+    Evidence,
     GovernedCapabilityResult,
     InMemoryReadWorkflowRunner,
     ReadPlanStep,
@@ -115,7 +116,7 @@ class GovernedReadOrchestrator:
 
         checkpoint = self._checkpoints.save(
             task.task_id,
-            {"status": "running", "completed_steps": []},
+            {"status": "running", "completed_steps": [], "completed_results": []},
             now=self._now(),
         )
         results: list[GovernedCapabilityResult] = []
@@ -173,6 +174,9 @@ class GovernedReadOrchestrator:
                     {
                         "status": "running",
                         "completed_steps": [item.step_id for item in results],
+                        "completed_results": [
+                            self._serialize_result(item) for item in results
+                        ],
                     },
                     expected_version=checkpoint.version,
                     now=self._now(),
@@ -188,6 +192,100 @@ class GovernedReadOrchestrator:
                 )
                 self._ensure_lease(lease)
             self._cancellations.raise_if_cancelled(task.task_id)
+            result = self._runner.run(plan, results)
+        except WorkflowCancelled as exc:
+            result = ReadWorkflowResult(
+                state=WorkflowResultState.CANCELLED,
+                reason=str(exc),
+            )
+            task, checkpoint = self._finish(
+                principal, task, TaskStatus.CANCELLED, result, checkpoint
+            )
+            self._release(lease)
+            return GovernedReadOutcome(task, result, checkpoint.version, lease.lease_id)
+
+        except (LookupError, PermissionError) as exc:
+            result = ReadWorkflowResult(
+                state=WorkflowResultState.FAILED,
+                reason=str(exc),
+            )
+            task, checkpoint = self._finish(
+                principal, task, TaskStatus.FAILED, result, checkpoint
+            )
+            self._release(lease)
+            return GovernedReadOutcome(task, result, checkpoint.version, lease.lease_id)
+
+        task_status = (
+            TaskStatus.COMPLETED
+            if result.state is WorkflowResultState.COMPLETED
+            else TaskStatus.FAILED
+        )
+        task, checkpoint = self._finish(
+            principal, task, task_status, result, checkpoint
+        )
+        self._release(lease)
+        return GovernedReadOutcome(task, result, checkpoint.version, lease.lease_id)
+
+    def resume(
+        self,
+        principal: Principal,
+        plan: ReadWorkflowPlan,
+        task_id: str,
+    ) -> GovernedReadOutcome:
+        """Resume a running task from its latest checkpoint."""
+
+        task = self._tasks.get(principal, task_id)
+        checkpoint = self._checkpoints.latest(task_id)
+        if checkpoint is None:
+            raise LookupError("Workflow checkpoint was not found.")
+        results = [
+            self._deserialize_result(item)
+            for item in checkpoint.state.get("completed_results", [])
+        ]
+        completed_steps = {
+            item.step_id for item in results
+        } | set(checkpoint.state.get("completed_steps", []))
+        lease = self._leases.acquire(
+            task_id,
+            self._owner_id,
+            self._lease_ttl,
+            now=self._now(),
+        )
+        try:
+            for step in plan.steps:
+                if step.step_id in completed_steps:
+                    continue
+                self._ensure_lease(lease)
+                self._cancellations.raise_if_cancelled(task_id)
+                try:
+                    result = self._executor.execute(principal, task_id, step)
+                except PermissionError:
+                    result = GovernedCapabilityResult(
+                        step_id=step.step_id,
+                        capability=step.capability,
+                        state=CapabilityResultState.DENIED,
+                    )
+                except Exception:
+                    result = GovernedCapabilityResult(
+                        step_id=step.step_id,
+                        capability=step.capability,
+                        state=CapabilityResultState.FAILED,
+                    )
+                if result.step_id != step.step_id or result.capability != step.capability:
+                    raise ValueError("Executor result does not match the planned step.")
+                results.append(result)
+                checkpoint = self._checkpoints.save(
+                    task_id,
+                    {
+                        "status": "running",
+                        "completed_steps": [item.step_id for item in results],
+                        "completed_results": [
+                            self._serialize_result(item) for item in results
+                        ],
+                    },
+                    expected_version=checkpoint.version,
+                    now=self._now(),
+                )
             result = self._runner.run(plan, results)
         except WorkflowCancelled as exc:
             result = ReadWorkflowResult(
@@ -220,6 +318,46 @@ class GovernedReadOrchestrator:
         )
         self._release(lease)
         return GovernedReadOutcome(task, result, checkpoint.version, lease.lease_id)
+
+    @staticmethod
+    def _serialize_result(result: GovernedCapabilityResult) -> dict[str, object]:
+        return {
+            "step_id": result.step_id,
+            "capability": result.capability,
+            "state": result.state.value,
+            "value": result.value,
+            "confidence": result.confidence,
+            "evidence": [
+                {
+                    "source": item.source,
+                    "reference": item.reference,
+                    "capability": item.capability,
+                    "observed_at": item.observed_at.isoformat(),
+                    "metadata": dict(item.metadata),
+                }
+                for item in result.evidence
+            ],
+        }
+
+    @staticmethod
+    def _deserialize_result(raw: dict[str, object]) -> GovernedCapabilityResult:
+        return GovernedCapabilityResult(
+            step_id=str(raw["step_id"]),
+            capability=str(raw["capability"]),
+            state=CapabilityResultState(str(raw["state"])),
+            value=raw.get("value"),
+            confidence=raw.get("confidence"),
+            evidence=tuple(
+                Evidence(
+                    source=str(item["source"]),
+                    reference=str(item["reference"]),
+                    capability=str(item["capability"]),
+                    observed_at=datetime.fromisoformat(str(item["observed_at"])),
+                    metadata=item.get("metadata", {}),
+                )
+                for item in raw.get("evidence", [])
+            ),
+        )
 
     def _finish(
         self,

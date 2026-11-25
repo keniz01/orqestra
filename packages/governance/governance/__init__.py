@@ -8,6 +8,7 @@ from .ledger import (
     LedgerConflict,
 )
 from .models import GovernanceEvent
+from .sqlite_ledger import SQLiteGovernanceLedger
 
 __all__ = [
     "GovernanceEvent",
@@ -16,4 +17,5 @@ __all__ = [
     "InMemoryGovernanceLedger",
     "InMemoryGovernanceRepository",
     "LedgerConflict",
+    "SQLiteGovernanceLedger",
 ]

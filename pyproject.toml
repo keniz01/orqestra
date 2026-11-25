@@ -13,6 +13,7 @@ pythonpath = [
     "packages/task_runtime",
     "packages/approval_plane",
     "packages/governance",
+    "packages/workflow_reliability",
     "packages/semantic_catalog",
 ]
 testpaths = [
@@ -20,5 +21,6 @@ testpaths = [
     "packages/task_runtime/tests",
     "packages/approval_plane/tests",
     "packages/governance/tests",
+    "packages/workflow_reliability/tests",
     "packages/semantic_catalog/tests",
 ]

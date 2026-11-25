@@ -10,6 +10,8 @@ agent models, and database credentials.
 ## Implemented
 
 - immutable trusted `Principal` contract;
+- explicit capability registry with read-only capability metadata;
+- time-bounded agent delegation scoped to capabilities and tasks;
 - server-owned `(org_id, database_id)` tenant binding resolution;
 - deny-by-default capability policy evaluator;
 - typed `QueryPlan` and bounded `QueryResult` contracts;
@@ -18,6 +20,7 @@ agent models, and database credentials.
   system tables, empty input, control characters, and oversized input;
 - policy-driven result masking;
 - maximum-row bounding with truncation reporting;
+- maximum-result-byte bounding with truncation reporting;
 - append-only audit events for tenant denial, SQL denial, policy decisions, and
   successful capability execution;
 - executor protocol that keeps database I/O outside the kernel;
@@ -41,7 +44,7 @@ policy, tenant resolution, masking, limits, or audit.
 
 ```text
 python3 -m pytest -q
-8 passed
+11 passed
 ```
 
 The current executor protocol is deliberately synchronous and in-process.

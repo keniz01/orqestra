@@ -3,11 +3,13 @@
 from .contracts import (
     AuditEvent,
     CapabilityRequest,
+    DelegationContext,
     Principal,
     QueryPlan,
     QueryResult,
     TenantBinding,
 )
+from .capabilities import CapabilityError, CapabilityRegistry, CapabilitySpec
 from .engine import ExecutionKernel, ExecutionLimits
 from .policy import PolicyDecision, PolicyEvaluator, RulePolicyEvaluator
 from .sql import SqlValidationError, validate_read_query
@@ -16,6 +18,10 @@ from .tenant import TenantBindingRegistry, TenantResolutionError
 __all__ = [
     "AuditEvent",
     "CapabilityRequest",
+    "CapabilityError",
+    "CapabilityRegistry",
+    "CapabilitySpec",
+    "DelegationContext",
     "ExecutionKernel",
     "ExecutionLimits",
     "PolicyDecision",

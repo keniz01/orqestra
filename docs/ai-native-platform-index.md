@@ -17,6 +17,7 @@ architecture and its invariants are agreed.
 3. [Capability mapping](ai-native-capability-map.md)
 4. [Proposed repository structure](ai-native-repository-structure.md)
 5. [Phased implementation roadmap](ai-native-roadmap.md)
+6. [Semantic catalog foundation](phase3-semantic-catalog.md)
 
 ## Decision required
 

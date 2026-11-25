@@ -28,6 +28,10 @@ agent models, and database credentials.
 - executor protocol that keeps database I/O outside the kernel;
 - focused tests for authorization, tenant isolation, SQL rejection, masking,
   and result bounds.
+- governed connector runner boundary that requires a tenant-matching policy
+  allow decision, preserves server-owned bindings, propagates cancellation and
+  timeouts, bounds results, rejects credentials, and emits attributable audit
+  events.
 
 ## Explicit non-goals for this slice
 

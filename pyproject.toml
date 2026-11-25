@@ -30,5 +30,6 @@ testpaths = [
     "packages/read_workflows/tests",
     "packages/workflow_reliability/tests",
     "packages/semantic_catalog/tests",
+    "tests/integration",
     "packages/governed_orchestrator/tests",
 ]

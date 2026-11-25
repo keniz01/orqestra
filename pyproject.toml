@@ -18,6 +18,7 @@ pythonpath = [
     "packages/read_workflows",
     "packages/workflow_reliability",
     "packages/semantic_catalog",
+    "packages/governed_orchestrator",
 ]
 testpaths = [
     "packages/execution_kernel/tests",
@@ -29,4 +30,5 @@ testpaths = [
     "packages/read_workflows/tests",
     "packages/workflow_reliability/tests",
     "packages/semantic_catalog/tests",
+    "packages/governed_orchestrator/tests",
 ]

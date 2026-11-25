@@ -17,6 +17,8 @@ foundations include:
 - tenant-scoped task and plan state transitions;
 - explicit tenant-scoped approval requests with separation of duties and expiry;
 - append-only governance events with idempotent, tenant-scoped ledger reads.
+- a model-independent governed read orchestrator with leases, checkpoints,
+  cancellation, and evidence-backed results.
 - formal task, approval, and governance repository protocols with in-memory
   reference adapters.
 

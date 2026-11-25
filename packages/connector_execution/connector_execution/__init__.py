@@ -13,6 +13,7 @@ from .contracts import (
 )
 from .registry import ConnectorBindingRegistry, ConnectorResolutionError
 from .runner import AsyncConnector, AsyncConnectorRunner
+from .integration import GovernedConnectorRunner
 
 __all__ = [
     "AsyncConnector",
@@ -28,4 +29,5 @@ __all__ = [
     "ExecutionRequest",
     "ExecutionResult",
     "ExecutionTimeout",
+    "GovernedConnectorRunner",
 ]

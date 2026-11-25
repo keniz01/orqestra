@@ -80,6 +80,7 @@ class ExecutionRequest:
     parameters: Mapping[str, Any] = field(default_factory=dict)
     max_rows: int = 5_000
     max_result_bytes: int = 5_000_000
+    task_id: str | None = None
     requested_at: datetime | None = None
 
     def __post_init__(self) -> None:
@@ -87,6 +88,8 @@ class ExecutionRequest:
         object.__setattr__(self, "statement", _text(self.statement, "statement"))
         if self.max_rows < 1 or self.max_result_bytes < 1:
             raise ValueError("result bounds must be positive")
+        if self.task_id is not None:
+            object.__setattr__(self, "task_id", _text(self.task_id, "task_id"))
         _reject_credentials(self.parameters)
         object.__setattr__(self, "parameters", dict(self.parameters))
 

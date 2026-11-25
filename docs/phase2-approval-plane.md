@@ -14,6 +14,7 @@ capabilities that require human authorization.
 - separation of duties: requesters cannot approve themselves;
 - optimistic version checks;
 - approval validation that matches task and capability;
+- execution-kernel enforcement for approval-required capabilities;
 - in-memory reference store for local development and contract tests.
 
 ## Security boundary

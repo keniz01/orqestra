@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from enum import StrEnum
+from typing import Protocol, runtime_checkable
 from uuid import uuid4
 
 from execution_kernel import Principal
@@ -26,6 +27,32 @@ class TaskConflict(RuntimeError):
 
 class InvalidTaskTransition(ValueError):
     """Raised when a task state transition is not permitted."""
+
+
+@runtime_checkable
+class TaskRepository(Protocol):
+    """Persistence boundary for tenant-scoped task state."""
+
+    def create(
+        self,
+        principal: Principal,
+        goal: str,
+        steps: Iterable[PlanStep],
+    ) -> Task:
+        ...
+
+    def get(self, principal: Principal, task_id: str) -> Task:
+        ...
+
+    def transition(
+        self,
+        principal: Principal,
+        task_id: str,
+        target: TaskStatus,
+        *,
+        expected_version: int,
+    ) -> Task:
+        ...
 
 
 class InMemoryTaskStore:
@@ -131,3 +158,7 @@ class InMemoryTaskStore:
     def _emit(self, event: GovernanceEvent) -> None:
         if self._event_sink is not None:
             self._event_sink(event)
+
+
+# Explicit adapter name for callers that depend on the repository contract.
+InMemoryTaskRepository = InMemoryTaskStore

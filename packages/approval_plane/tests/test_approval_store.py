@@ -12,6 +12,7 @@ from approval_plane import (
     ApprovalStatus,
     ApprovalStore,
     InMemoryApprovalRepository,
+    SQLiteApprovalRepository,
 )
 from execution_kernel import Principal
 
@@ -114,3 +115,28 @@ def test_in_memory_approval_adapter_satisfies_repository_contract():
 
     assert isinstance(store, ApprovalRepository)
     assert isinstance(store, ApprovalStore)
+
+
+def test_sqlite_approval_repository_preserves_decisions_after_reopen(tmp_path):
+    database = tmp_path / "approvals.sqlite"
+    first_store = SQLiteApprovalRepository(str(database))
+    request = create_request(first_store)
+    approved = first_store.decide(
+        principal("approver"),
+        request.approval_id,
+        ApprovalDecision.APPROVE,
+        expected_version=request.version,
+    )
+    first_store.close()
+
+    second_store = SQLiteApprovalRepository(str(database))
+    restored = second_store.get(principal("requester"), request.approval_id)
+    assert restored.status is ApprovalStatus.APPROVED
+    assert restored.version == approved.version
+    assert second_store.is_approved(
+        principal("requester"),
+        request.approval_id,
+        task_id="task-1",
+        capability="data.export_result",
+    )
+    second_store.close()

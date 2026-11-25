@@ -10,6 +10,7 @@ from .store import (
     TaskNotFound,
     TaskScopeError,
 )
+from .sqlite_store import SQLiteTaskRepository
 
 __all__ = [
     "InMemoryTaskStore",
@@ -22,5 +23,6 @@ __all__ = [
     "TaskNotFound",
     "TaskRepository",
     "TaskScopeError",
+    "SQLiteTaskRepository",
     "TaskStatus",
 ]

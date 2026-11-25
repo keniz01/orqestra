@@ -10,6 +10,7 @@ from .store import (
     InMemoryApprovalRepository,
     InvalidApprovalDecision,
 )
+from .sqlite_store import SQLiteApprovalRepository
 
 __all__ = [
     "ApprovalConflict",
@@ -22,4 +23,5 @@ __all__ = [
     "ApprovalStore",
     "InMemoryApprovalRepository",
     "InvalidApprovalDecision",
+    "SQLiteApprovalRepository",
 ]

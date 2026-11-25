@@ -10,6 +10,7 @@ from .models import (
     RetentionClass,
 )
 from .store import InMemoryMemoryStore, MemoryAuthorizationError, MemoryNotFound
+from .sqlite_store import SQLiteMemoryStore
 
 __all__ = [
     "InMemoryMemoryStore",
@@ -22,4 +23,5 @@ __all__ = [
     "MemoryRetention",
     "MemoryScope",
     "RetentionClass",
+    "SQLiteMemoryStore",
 ]

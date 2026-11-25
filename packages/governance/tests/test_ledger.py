@@ -6,10 +6,12 @@ from datetime import datetime
 from execution_kernel import Principal
 from governance import (
     GovernanceEvent,
+    GovernanceEventBus,
     GovernanceRepository,
     InMemoryGovernanceLedger,
     InMemoryGovernanceRepository,
     LedgerConflict,
+    SQLiteGovernanceLedger,
 )
 
 
@@ -89,3 +91,30 @@ def test_in_memory_governance_adapter_satisfies_repository_contract():
 
     assert isinstance(ledger, GovernanceRepository)
     assert isinstance(ledger, InMemoryGovernanceLedger)
+
+
+def test_sqlite_governance_ledger_is_idempotent_and_tenant_scoped(tmp_path):
+    database = tmp_path / "governance.sqlite"
+    first_ledger = SQLiteGovernanceLedger(str(database))
+    first = event()
+    first_ledger.append(first)
+    first_ledger.append(first)
+    first_ledger.close()
+
+    second_ledger = SQLiteGovernanceLedger(str(database))
+    assert second_ledger.events_for(principal()) == (first,)
+    assert second_ledger.events_for(Principal(user_id="other", org_id="org-2")) == ()
+    second_ledger.close()
+
+
+def test_event_bus_persists_before_delivering_to_subscribers():
+    ledger = InMemoryGovernanceLedger()
+    received = []
+    bus = GovernanceEventBus(ledger)
+    bus.subscribe("task.created", received.append)
+    current = event()
+
+    bus.publish(current)
+
+    assert received == [current]
+    assert ledger.events_for(principal()) == (current,)

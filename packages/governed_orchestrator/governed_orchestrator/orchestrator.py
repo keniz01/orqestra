@@ -33,6 +33,7 @@ from workflow_reliability import (
     Lease,
     WorkflowCancelled,
 )
+from .report_store import WorkflowReportStore
 
 
 class GovernedCapabilityExecutor(Protocol):
@@ -72,6 +73,7 @@ class GovernedReadOrchestrator:
         executor: GovernedCapabilityExecutor,
         runner: InMemoryReadWorkflowRunner | None = None,
         critic: ReadWorkflowCritic | None = None,
+        report_store: WorkflowReportStore | None = None,
         owner_id: str = "governed-read-orchestrator",
         lease_ttl: timedelta = timedelta(minutes=5),
         clock: Callable[[], datetime] | None = None,
@@ -84,6 +86,7 @@ class GovernedReadOrchestrator:
         self._executor = executor
         self._runner = runner or InMemoryReadWorkflowRunner()
         self._critic = critic
+        self._report_store = report_store
         self._owner_id = owner_id
         self._lease_ttl = lease_ttl
         self._clock = clock or (lambda: datetime.now(timezone.utc))
@@ -399,8 +402,8 @@ class GovernedReadOrchestrator:
             reason=critique.reason,
         )
 
-    @staticmethod
     def _outcome(
+        self,
         task: Task,
         result: ReadWorkflowResult,
         checkpoint: Checkpoint,
@@ -411,6 +414,8 @@ class GovernedReadOrchestrator:
         report = ReadWorkflowReport.from_result(
             plan.goal, result, trace_id=task.task_id
         )
+        if self._report_store is not None:
+            self._report_store.save(task.owner.org_id, report)
         return GovernedReadOutcome(
             task,
             result,
@@ -418,6 +423,15 @@ class GovernedReadOrchestrator:
             lease_id,
             report,
         )
+
+    def report_for(
+        self, principal: Principal, trace_id: str
+    ) -> ReadWorkflowReport | None:
+        """Replay a report only within the trusted principal's tenant."""
+
+        if self._report_store is None:
+            return None
+        return self._report_store.get(principal.org_id, trace_id)
 
     def _finish(
         self,

@@ -14,8 +14,11 @@ from read_workflows import (
     WorkflowBudget,
     WorkflowCritique,
     CritiqueState,
+    DeterministicReadWorkflowPlanner,
+    GovernedContext,
     WorkflowResultState,
 )
+from execution_kernel import Principal
 
 
 def plan() -> ReadWorkflowPlan:
@@ -137,3 +140,25 @@ def test_non_accepted_critique_prevents_completion():
         ),
     )
     assert result.state is WorkflowResultState.PARTIAL
+
+
+def test_deterministic_planner_emits_typed_intent_only():
+    principal = Principal(user_id="user-1", org_id="org-1")
+    plan = DeterministicReadWorkflowPlanner().plan_for(
+        principal,
+        "compare monthly revenue",
+        GovernedContext(tenant_id="org-1"),
+    )
+
+    assert plan.steps[0].capability == "catalog.search_semantic_metadata"
+    assert "sql" not in plan.steps[0].arguments
+    assert "credentials" not in plan.steps[0].arguments
+
+
+def test_planner_rejects_cross_tenant_context():
+    with pytest.raises(PermissionError, match="tenant boundary"):
+        DeterministicReadWorkflowPlanner().plan_for(
+            Principal(user_id="user-1", org_id="org-1"),
+            "read revenue",
+            GovernedContext(tenant_id="org-2"),
+        )

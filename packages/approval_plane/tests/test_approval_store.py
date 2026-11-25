@@ -7,9 +7,11 @@ import pytest
 from approval_plane import (
     ApprovalConflict,
     ApprovalDecision,
+    ApprovalRepository,
     ApprovalScopeError,
     ApprovalStatus,
     ApprovalStore,
+    InMemoryApprovalRepository,
 )
 from execution_kernel import Principal
 
@@ -105,3 +107,10 @@ def test_approval_store_emits_governance_events():
         "approval.decided",
     ]
     assert all(event.org_id == "org-1" for event in events)
+
+
+def test_in_memory_approval_adapter_satisfies_repository_contract():
+    store = InMemoryApprovalRepository()
+
+    assert isinstance(store, ApprovalRepository)
+    assert isinstance(store, ApprovalStore)

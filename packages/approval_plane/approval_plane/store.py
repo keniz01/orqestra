@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime, timezone
+from typing import Protocol, runtime_checkable
 from uuid import uuid4
 
 from execution_kernel import Principal
@@ -31,6 +32,45 @@ class ApprovalConflict(RuntimeError):
 
 class InvalidApprovalDecision(ValueError):
     """Raised when an approval cannot be decided."""
+
+
+@runtime_checkable
+class ApprovalRepository(Protocol):
+    """Persistence boundary for tenant-scoped approval authority."""
+
+    def create(
+        self,
+        requester: Principal,
+        *,
+        task_id: str,
+        capability: str,
+        reason: str,
+        expires_at: datetime,
+    ) -> ApprovalRequest:
+        ...
+
+    def get(self, principal: Principal, approval_id: str) -> ApprovalRequest:
+        ...
+
+    def decide(
+        self,
+        approver: Principal,
+        approval_id: str,
+        decision: ApprovalDecision,
+        *,
+        expected_version: int,
+    ) -> ApprovalRequest:
+        ...
+
+    def is_approved(
+        self,
+        principal: Principal,
+        approval_id: str,
+        *,
+        task_id: str,
+        capability: str,
+    ) -> bool:
+        ...
 
 
 class ApprovalStore:
@@ -164,3 +204,7 @@ class ApprovalStore:
     def _emit(self, event: GovernanceEvent) -> None:
         if self._event_sink is not None:
             self._event_sink(event)
+
+
+# Explicit adapter name for callers that depend on the repository contract.
+InMemoryApprovalRepository = ApprovalStore

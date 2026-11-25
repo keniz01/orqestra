@@ -4,7 +4,13 @@ import pytest
 from datetime import datetime
 
 from execution_kernel import Principal
-from governance import GovernanceEvent, InMemoryGovernanceLedger, LedgerConflict
+from governance import (
+    GovernanceEvent,
+    GovernanceRepository,
+    InMemoryGovernanceLedger,
+    InMemoryGovernanceRepository,
+    LedgerConflict,
+)
 
 
 def principal(org_id: str = "org-1") -> Principal:
@@ -76,3 +82,10 @@ def test_event_payload_is_copied_and_timestamps_require_timezone():
             reason="Task created.",
             occurred_at=datetime(2026, 1, 1),
         )
+
+
+def test_in_memory_governance_adapter_satisfies_repository_contract():
+    ledger = InMemoryGovernanceRepository()
+
+    assert isinstance(ledger, GovernanceRepository)
+    assert isinstance(ledger, InMemoryGovernanceLedger)

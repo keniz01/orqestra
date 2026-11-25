@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timezone
 from uuid import uuid4
 
 from execution_kernel import Principal
+from governance import GovernanceEvent
 
 from .models import (
     ApprovalDecision,
@@ -34,8 +36,12 @@ class InvalidApprovalDecision(ValueError):
 class ApprovalStore:
     """In-memory reference implementation for approval contract tests."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        event_sink: Callable[[GovernanceEvent], None] | None = None,
+    ) -> None:
         self._requests: dict[str, ApprovalRequest] = {}
+        self._event_sink = event_sink
 
     def create(
         self,
@@ -54,6 +60,19 @@ class ApprovalStore:
             requester_id=requester.user_id,
             reason=reason,
             expires_at=expires_at,
+        )
+        self._emit(
+            GovernanceEvent(
+                org_id=request.org_id,
+                event_type="approval.created",
+                actor_user_id=request.requester_id,
+                decision="allow",
+                reason="Approval request created.",
+                task_id=request.task_id,
+                approval_id=request.approval_id,
+                capability=request.capability,
+                payload={"version": request.version},
+            )
         )
         self._requests[request.approval_id] = request
         return request
@@ -88,6 +107,19 @@ class ApprovalStore:
         else:
             raise InvalidApprovalDecision("Unsupported approval decision.")
         updated = request.decided(status, approver.user_id)
+        self._emit(
+            GovernanceEvent(
+                org_id=updated.org_id,
+                event_type="approval.decided",
+                actor_user_id=approver.user_id,
+                decision=updated.status.value,
+                reason="Approval request decided.",
+                task_id=updated.task_id,
+                approval_id=updated.approval_id,
+                capability=updated.capability,
+                payload={"version": updated.version},
+            )
+        )
         self._requests[approval_id] = updated
         return updated
 
@@ -112,6 +144,23 @@ class ApprovalStore:
             and datetime.now(timezone.utc) >= request.expires_at
         ):
             expired = request.decided(ApprovalStatus.EXPIRED, "system")
+            self._emit(
+                GovernanceEvent(
+                    org_id=expired.org_id,
+                    event_type="approval.expired",
+                    actor_user_id="system",
+                    decision=expired.status.value,
+                    reason="Approval request expired.",
+                    task_id=expired.task_id,
+                    approval_id=expired.approval_id,
+                    capability=expired.capability,
+                    payload={"version": expired.version},
+                )
+            )
             self._requests[request.approval_id] = expired
             return expired
         return request
+
+    def _emit(self, event: GovernanceEvent) -> None:
+        if self._event_sink is not None:
+            self._event_sink(event)

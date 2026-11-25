@@ -14,6 +14,7 @@ optimistic-concurrency-protected state transitions.
 - tenant and principal ownership checks on every read and transition;
 - optimistic version checks to reject stale workers;
 - invalid-transition rejection;
+- append-only governance events for creation and transitions;
 - in-memory reference store for local development and contract tests.
 
 ## Transition rules

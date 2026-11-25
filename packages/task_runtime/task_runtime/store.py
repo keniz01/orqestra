@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from enum import StrEnum
 from uuid import uuid4
 
 from execution_kernel import Principal
+from governance import GovernanceEvent
 
 from .models import PlanStep, Task, TaskStatus
 
@@ -52,8 +53,12 @@ class InMemoryTaskStore:
         TaskStatus.CANCELLED: frozenset(),
     }
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        event_sink: Callable[[GovernanceEvent], None] | None = None,
+    ) -> None:
         self._tasks: dict[str, Task] = {}
+        self._event_sink = event_sink
 
     def create(
         self,
@@ -66,6 +71,17 @@ class InMemoryTaskStore:
             owner=principal,
             goal=goal,
             steps=tuple(steps),
+        )
+        self._emit(
+            GovernanceEvent(
+                org_id=principal.org_id,
+                event_type="task.created",
+                actor_user_id=principal.user_id,
+                decision="allow",
+                reason="Task created.",
+                task_id=task.task_id,
+                payload={"status": task.status.value, "version": task.version},
+            )
         )
         self._tasks[task.task_id] = task
         return task
@@ -94,5 +110,24 @@ class InMemoryTaskStore:
                 f"Cannot transition task from {current.status} to {target}."
             )
         updated = current.with_status(target)
+        self._emit(
+            GovernanceEvent(
+                org_id=principal.org_id,
+                event_type="task.transitioned",
+                actor_user_id=principal.user_id,
+                decision="allow",
+                reason="Task status transitioned.",
+                task_id=task_id,
+                payload={
+                    "from_status": current.status.value,
+                    "to_status": updated.status.value,
+                    "version": updated.version,
+                },
+            )
+        )
         self._tasks[task_id] = updated
         return updated
+
+    def _emit(self, event: GovernanceEvent) -> None:
+        if self._event_sink is not None:
+            self._event_sink(event)

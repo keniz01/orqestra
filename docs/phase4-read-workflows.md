@@ -9,3 +9,10 @@ does not execute, authorize, or discover capabilities.
 Each successful result includes provenance evidence and a confidence score in
 the range `0..1`. Missing evidence or confidence prevents completion. Direct
 SQL and credential-shaped inputs are rejected at the plan boundary.
+
+The Phase 4 reference implementation also enforces per-plan step and evidence
+budgets, carries query hashes and citation references through capability
+results, reviews successful results through a structured critic boundary, and
+exposes an evidence-backed report keyed by the durable task trace identifier.
+The runner and report contracts remain model-independent; capability
+authorization and execution stay outside this package.

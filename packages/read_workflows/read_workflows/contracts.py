@@ -67,6 +67,20 @@ class CapabilityResultState(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class WorkflowBudget:
+    """Bounds applied to a workflow before capabilities are invoked."""
+
+    max_steps: int = 32
+    max_evidence: int = 128
+
+    def __post_init__(self) -> None:
+        if self.max_steps < 1:
+            raise ValueError("max_steps must be positive")
+        if self.max_evidence < 1:
+            raise ValueError("max_evidence must be positive")
+
+
+@dataclass(frozen=True, slots=True)
 class Evidence:
     """A provenance record supplied by a governed capability."""
 
@@ -75,6 +89,7 @@ class Evidence:
     capability: str
     observed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    query_hash: str | None = None
 
     def __post_init__(self) -> None:
         for field_name in ("source", "reference", "capability"):
@@ -86,6 +101,10 @@ class Evidence:
         if self.observed_at.tzinfo is None:
             raise ValueError("observed_at must include timezone information")
         object.__setattr__(self, "metadata", dict(self.metadata))
+        if self.query_hash is not None:
+            object.__setattr__(
+                self, "query_hash", _required_text(self.query_hash, "query_hash")
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,11 +131,16 @@ class ReadWorkflowPlan:
 
     goal: str
     steps: tuple[ReadPlanStep, ...]
+    budget: WorkflowBudget = field(default_factory=WorkflowBudget)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "goal", _required_text(self.goal, "goal"))
         if not self.steps:
             raise ValueError("steps must not be empty")
+        if not isinstance(self.budget, WorkflowBudget):
+            raise ValueError("budget must be a WorkflowBudget")
+        if len(self.steps) > self.budget.max_steps:
+            raise ValueError("steps exceed the workflow budget")
         step_ids = [step.step_id for step in self.steps]
         if len(step_ids) != len(set(step_ids)):
             raise ValueError("step_id values must be unique")
@@ -133,6 +157,7 @@ class GovernedCapabilityResult:
     value: Any = None
     evidence: tuple[Evidence, ...] = ()
     confidence: float | None = None
+    query_hash: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "step_id", _required_text(self.step_id, "step_id"))
@@ -142,6 +167,32 @@ class GovernedCapabilityResult:
         if self.confidence is not None and not 0 <= self.confidence <= 1:
             raise ValueError("confidence must be between 0 and 1")
         object.__setattr__(self, "evidence", tuple(self.evidence))
+        if self.query_hash is not None:
+            object.__setattr__(
+                self, "query_hash", _required_text(self.query_hash, "query_hash")
+            )
+
+
+class CritiqueState(StrEnum):
+    """Outcome of a bounded result critique."""
+
+    ACCEPTED = "accepted"
+    NEEDS_REVIEW = "needs_review"
+    REJECTED = "rejected"
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowCritique:
+    """Structured quality decision for an otherwise governed result."""
+
+    state: CritiqueState
+    reason: str
+    confidence: float | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "reason", _required_text(self.reason, "reason"))
+        if self.confidence is not None and not 0 <= self.confidence <= 1:
+            raise ValueError("confidence must be between 0 and 1")
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,14 +204,75 @@ class ReadWorkflowResult:
     evidence: tuple[Evidence, ...] = ()
     confidence: float | None = None
     reason: str | None = None
+    critique: WorkflowCritique | None = None
+    trace_id: str | None = None
+    query_hashes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "values", dict(self.values))
         object.__setattr__(self, "evidence", tuple(self.evidence))
+        object.__setattr__(
+            self, "query_hashes", tuple(dict.fromkeys(self.query_hashes))
+        )
+        if not self.query_hashes:
+            object.__setattr__(
+                self,
+                "query_hashes",
+                tuple(
+                    dict.fromkeys(
+                        item.query_hash
+                        for item in self.evidence
+                        if item.query_hash is not None
+                    )
+                ),
+            )
         if self.confidence is not None and not 0 <= self.confidence <= 1:
             raise ValueError("confidence must be between 0 and 1")
+        if self.trace_id is not None:
+            object.__setattr__(
+                self, "trace_id", _required_text(self.trace_id, "trace_id")
+            )
         if self.state is WorkflowResultState.COMPLETED:
             if not self.evidence:
                 raise ValueError("completed results require evidence")
             if self.confidence is None:
                 raise ValueError("completed results require confidence")
+            if self.critique is not None and (
+                self.critique.state is not CritiqueState.ACCEPTED
+            ):
+                raise ValueError("completed results require an accepted critique")
+
+    @property
+    def citations(self) -> tuple[str, ...]:
+        """Return unique provenance references in stable order."""
+
+        return tuple(dict.fromkeys(item.reference for item in self.evidence))
+
+
+@dataclass(frozen=True, slots=True)
+class ReadWorkflowReport:
+    """Evidence-backed, replay-oriented presentation of a workflow result."""
+
+    goal: str
+    state: WorkflowResultState
+    values: Mapping[str, Any]
+    citations: tuple[str, ...]
+    query_hashes: tuple[str, ...]
+    confidence: float | None
+    trace_id: str
+    critique: WorkflowCritique | None = None
+
+    @classmethod
+    def from_result(
+        cls, goal: str, result: ReadWorkflowResult, *, trace_id: str
+    ) -> "ReadWorkflowReport":
+        return cls(
+            goal=_required_text(goal, "goal"),
+            state=result.state,
+            values=result.values,
+            citations=result.citations,
+            query_hashes=result.query_hashes,
+            confidence=result.confidence,
+            trace_id=_required_text(trace_id, "trace_id"),
+            critique=result.critique,
+        )

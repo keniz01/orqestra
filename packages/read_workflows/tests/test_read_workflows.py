@@ -9,7 +9,11 @@ from read_workflows import (
     InMemoryReadWorkflowRunner,
     ReadPlanStep,
     ReadWorkflowPlan,
+    ReadWorkflowReport,
     ReadWorkflowResult,
+    WorkflowBudget,
+    WorkflowCritique,
+    CritiqueState,
     WorkflowResultState,
 )
 
@@ -86,3 +90,50 @@ def test_completion_requires_evidence_and_confidence():
         ),
     )
     assert incomplete.state is WorkflowResultState.PARTIAL
+
+
+def test_plan_budget_and_report_preserve_replay_metadata():
+    bounded = ReadWorkflowPlan(
+        goal="Compare revenue",
+        steps=(ReadPlanStep("aggregate", "catalog.metric"),),
+        budget=WorkflowBudget(max_steps=1, max_evidence=1),
+    )
+    result = InMemoryReadWorkflowRunner().run(
+        bounded,
+        (
+            GovernedCapabilityResult(
+                step_id="aggregate",
+                capability="catalog.metric",
+                state=CapabilityResultState.SUCCEEDED,
+                evidence=(
+                    Evidence(
+                        "catalog",
+                        "metric:revenue",
+                        "catalog.metric",
+                        query_hash="hash-1",
+                    ),
+                ),
+                confidence=0.8,
+                query_hash="hash-1",
+            ),
+        ),
+    )
+
+    report = ReadWorkflowReport.from_result(
+        bounded.goal, result, trace_id="task-1"
+    )
+    assert result.state is WorkflowResultState.COMPLETED
+    assert report.trace_id == "task-1"
+    assert report.citations == ("metric:revenue",)
+    assert report.query_hashes == ("hash-1",)
+
+
+def test_non_accepted_critique_prevents_completion():
+    result = ReadWorkflowResult(
+        state=WorkflowResultState.PARTIAL,
+        critique=WorkflowCritique(
+            state=CritiqueState.NEEDS_REVIEW,
+            reason="The result needs analyst review.",
+        ),
+    )
+    assert result.state is WorkflowResultState.PARTIAL

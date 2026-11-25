@@ -9,6 +9,7 @@ from .contracts import (
     GovernedCapabilityResult,
     ReadWorkflowPlan,
     ReadWorkflowResult,
+    WorkflowCritique,
 )
 
 
@@ -28,6 +29,15 @@ class ReadWorkflowRunner(Protocol):
         results: Sequence[GovernedCapabilityResult],
     ) -> ReadWorkflowResult:
         """Assemble a workflow result from already-governed capability results."""
+
+
+class ReadWorkflowCritic(Protocol):
+    """Reviews a result without receiving credentials or executable SQL."""
+
+    def critique(
+        self, plan: ReadWorkflowPlan, result: ReadWorkflowResult
+    ) -> WorkflowCritique:
+        """Return a structured quality decision."""
 
 
 class CapabilityResultProvider(Protocol):

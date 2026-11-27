@@ -19,6 +19,10 @@ foundations include:
 - append-only governance events with idempotent, tenant-scoped ledger reads;
 - a model-independent governed read orchestrator with leases, checkpoints,
   cancellation, and evidence-backed results.
+- a transport-neutral goal/report control boundary and first React/Vite
+  goal-oriented experience;
+- a server-bound PostgreSQL adapter that validates reads and enforces
+  transaction-level read-only execution and statement timeouts.
 - bounded, tenant-scoped context assembly from policy-filtered catalog facts
   and authorized memory records.
 - formal task, approval, and governance repository protocols with in-memory
@@ -43,6 +47,11 @@ The execution kernel is intentionally transport-independent. Database
 connectors, HTTP APIs, model providers, and agent workers must use its typed
 contracts rather than bypassing tenant resolution, policy, validation,
 masking, budgets, or audit.
+
+The first experience app is in `apps/experience-web`. It expects an
+authenticated control API exposing `POST /api/workflows` and
+`GET /api/workflows/{trace_id}`. Authentication and principal resolution remain
+server-owned; the browser submits goals only.
 
 ## Repository guardrails
 

@@ -1,14 +1,14 @@
 # AI-Native Data Platform — Architecture Set
 
-**Status:** Proposed
-**Decision gate:** Architecture agreement required before implementation
-**Last reviewed:** 2026-11-25
+**Status:** Approved for implementation
+**Decision gate:** Phase 5 product implementation
+**Last reviewed:** 2026-11-27
 **Baseline:** `c1345bab06b7c89062b6484e262dc5df1557dd79`
 
-This document set describes a greenfield AI-native data platform derived from
-the proven security and governance capabilities in this repository. It is
-intentionally design-only: no implementation should begin until the target
-architecture and its invariants are agreed.
+This document set describes an AI-native data platform derived from the proven
+security and governance capabilities in this repository. The initial
+architecture and invariants are approved; implementation proceeds through the
+phased roadmap.
 
 ## Documents
 
@@ -18,18 +18,13 @@ architecture and its invariants are agreed.
 4. [Proposed repository structure](ai-native-repository-structure.md)
 5. [Phased implementation roadmap](ai-native-roadmap.md)
 6. [Semantic catalog foundation](phase3-semantic-catalog.md)
+7. [Approved architecture decision record](architecture-decision-record.md)
 
-## Decision required
+## Approved decisions
 
-Approve or revise:
-
-- the platform boundary and autonomy levels;
-- the delegated agent identity model;
-- the capability and approval model;
-- the policy decision contract;
-- memory scope, retention, and classification rules;
-- the invariant that all data access remains inside the deterministic execution
-  kernel.
+The approved identity, connector, model, approval, classification, retention,
+audit, and autonomy decisions are recorded in
+[`architecture-decision-record.md`](architecture-decision-record.md).
 
 ## Non-negotiable design invariant
 

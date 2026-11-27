@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable, Iterable
 from typing import Protocol
 
 from execution_kernel import Principal
 
 from .service import GovernedReadControl, GoalRequest
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class PrincipalResolver(Protocol):
@@ -37,7 +40,10 @@ class WsgiGovernedReadApplication:
         try:
             principal = self._principal_resolver.resolve(environ)
         except PermissionError as exc:
-            return self._response(start_response, "401 Unauthorized", {"error": str(exc)})
+            _LOGGER.info("Request authentication failed: %s", exc)
+            return self._response(
+                start_response, "401 Unauthorized", {"error": "Authentication required."}
+            )
 
         method = str(environ.get("REQUEST_METHOD", "GET")).upper()
         path = str(environ.get("PATH_INFO", ""))
@@ -45,7 +51,13 @@ class WsgiGovernedReadApplication:
             return self._submit(environ, principal, start_response)
         if method == "GET" and path.startswith("/api/workflows/"):
             trace_id = path.removeprefix("/api/workflows/")
-            report = self._control.report_for(principal, trace_id)
+            try:
+                report = self._control.report_for(principal, trace_id)
+            except (PermissionError, ValueError) as exc:
+                _LOGGER.info("Report request rejected: %s", exc)
+                return self._response(
+                    start_response, "404 Not Found", {"error": "Report not found."}
+                )
             if report is None:
                 return self._response(
                     start_response, "404 Not Found", {"error": "Report not found."}
@@ -63,9 +75,20 @@ class WsgiGovernedReadApplication:
             body = _read_json(environ)
             response = self._control.submit(principal, GoalRequest(body["goal"]))
         except PermissionError as exc:
-            return self._response(start_response, "403 Forbidden", {"error": str(exc)})
+            _LOGGER.info("Workflow request rejected: %s", exc)
+            return self._response(
+                start_response, "403 Forbidden", {"error": "Request not authorized."}
+            )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-            return self._response(start_response, "400 Bad Request", {"error": str(exc)})
+            _LOGGER.info("Invalid workflow request: %s", exc)
+            return self._response(
+                start_response, "400 Bad Request", {"error": "Invalid request."}
+            )
+        except Exception:
+            _LOGGER.exception("Unhandled workflow request failure")
+            return self._response(
+                start_response, "500 Internal Server Error", {"error": "Request failed."}
+            )
         return self._response(
             start_response,
             "200 OK",

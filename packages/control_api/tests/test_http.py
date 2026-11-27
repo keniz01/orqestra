@@ -83,4 +83,4 @@ def test_http_adapter_rejects_malformed_goal_body():
     response, payload = call(app, "POST", "/api/workflows", b'{"goal":""}')
 
     assert response[0] == "400 Bad Request"
-    assert "non-empty" in payload["error"]
+    assert payload["error"] == "Invalid request."

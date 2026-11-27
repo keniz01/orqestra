@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "AI-native autonomous data platform foundations"
 requires-python = ">=3.12"
 dependencies = [
+    "cryptography>=45,<47",
     "psycopg[binary]>=3.2,<4",
+    "pyjwt>=2.10,<3",
     "sqlglot>=26,<27",
 ]
 

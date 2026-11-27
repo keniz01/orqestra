@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -65,7 +66,9 @@ class AsgiGovernedReadApplication:
                 response_status = status
                 response_headers = headers
 
-            body = b"".join(self._wsgi(environ, start_response))
+            body = b"".join(
+                await asyncio.to_thread(self._wsgi, environ, start_response)
+            )
             if response_status is None:
                 raise RuntimeError("WSGI application did not set a response status.")
             status_code = int(response_status.split(" ", 1)[0])

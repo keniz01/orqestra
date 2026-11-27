@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "AI-native autonomous data platform foundations"
 requires-python = ">=3.12"
 dependencies = [
+    "psycopg[binary]>=3.2,<4",
     "sqlglot>=26,<27",
 ]
 
@@ -15,6 +16,7 @@ pythonpath = [
     "packages/governance",
     "packages/memory_service",
     "packages/connector_execution",
+    "packages/control_api",
     "packages/read_workflows",
     "packages/workflow_reliability",
     "packages/semantic_catalog",
@@ -27,6 +29,7 @@ testpaths = [
     "packages/governance/tests",
     "packages/memory_service/tests",
     "packages/connector_execution/tests",
+    "packages/control_api/tests",
     "packages/read_workflows/tests",
     "packages/workflow_reliability/tests",
     "packages/semantic_catalog/tests",

@@ -14,10 +14,12 @@ from .contracts import (
 from .registry import ConnectorBindingRegistry, ConnectorResolutionError
 from .runner import AsyncConnector, AsyncConnectorRunner
 from .integration import GovernedConnectorRunner
+from .postgres import AsyncPostgresConnector
 
 __all__ = [
     "AsyncConnector",
     "AsyncConnectorRunner",
+    "AsyncPostgresConnector",
     "BoundExecutionRequest",
     "CancellationToken",
     "ConnectorBinding",

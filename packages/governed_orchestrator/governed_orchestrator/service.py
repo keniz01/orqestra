@@ -8,6 +8,7 @@ from read_workflows import (
     GovernedContext,
     ReadWorkflowPlan,
     ReadWorkflowReplanner,
+    ReadWorkflowReport,
     WorkflowResultState,
 )
 
@@ -79,3 +80,10 @@ class GovernedReadWorkflowService:
                 )
             plan = replacement
         raise AssertionError("bounded replanning loop exhausted unexpectedly")
+
+    def report_for(
+        self, principal: Principal, trace_id: str
+    ) -> ReadWorkflowReport | None:
+        """Replay a report only within the principal's tenant."""
+
+        return self._orchestrator.report_for(principal, trace_id)

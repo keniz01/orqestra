@@ -10,6 +10,7 @@ from execution_kernel import (
     TenantBinding,
     TenantBindingRegistry,
 )
+from control_api import GovernedReadControl, GoalRequest
 from governed_orchestrator import (
     GovernedReadOrchestrator,
     GovernedReadWorkflowService,
@@ -42,6 +43,21 @@ class ServerOwnedQueryBuilder:
         return KernelReadRequest(
             database_id="analytics",
             plan=QueryPlan("SELECT amount FROM revenue"),
+        )
+
+
+class ContextProvider:
+    def build(self, principal, goal):
+        return GovernedContext(
+            tenant_id=principal.org_id,
+            catalog=(
+                DataSourceMetadata(
+                    tenant_id=principal.org_id,
+                    source_id="warehouse",
+                    name="Analytics warehouse",
+                    kind=SourceKind.WAREHOUSE,
+                ),
+            ),
         )
 
 
@@ -99,25 +115,13 @@ def test_phase4_read_workflow_completes_with_governance_and_replay():
         orchestrator,
         DeterministicReadWorkflowPlanner(),
     )
+    control = GovernedReadControl(service, ContextProvider())
 
-    outcome = service.run_goal(
-        principal,
-        "compare monthly revenue",
-        GovernedContext(
-            tenant_id="org-1",
-            catalog=(
-                DataSourceMetadata(
-                    tenant_id="org-1",
-                    source_id="warehouse",
-                    name="Analytics warehouse",
-                    kind=SourceKind.WAREHOUSE,
-                ),
-            ),
-        ),
-    )
+    response = control.submit(principal, GoalRequest("compare monthly revenue"))
+    outcome = orchestrator.report_for(principal, response.trace_id)
 
-    assert outcome.result.state.value == "completed"
-    assert outcome.report is not None
-    assert outcome.report.trace_id == outcome.task.task_id
-    assert outcome.report.query_hashes
-    assert orchestrator.report_for(principal, outcome.task.task_id) == outcome.report
+    assert outcome is not None
+    assert outcome.state.value == "completed"
+    assert outcome.trace_id == response.trace_id
+    assert outcome.query_hashes
+    assert control.report_for(principal, response.trace_id) == outcome

@@ -29,13 +29,15 @@ from governed_orchestrator import (
 )
 from memory_service import InMemoryMemoryStore
 from read_workflows import (
+    AllowlistedPlanProvider,
     ContextAssembler,
     ContextPolicy,
-    DeterministicReadWorkflowPlanner,
     KernelCapabilityExecutor,
     KernelReadRequest,
+    ModelReadWorkflowPlanner,
+    ReferenceTypedPlanGenerator,
 )
-from semantic_catalog import InMemorySemanticCatalog
+from semantic_catalog import SQLiteSemanticCatalog
 from task_runtime import InMemoryTaskStore
 from workflow_reliability import (
     InMemoryCancellationStore,
@@ -83,13 +85,12 @@ class _ServerOwnedQueryBuilder:
 class _CatalogContextProvider:
     def __init__(self, catalog_path: str) -> None:
         self._assembler = ContextAssembler(
-            InMemorySemanticCatalog(),
+            SQLiteSemanticCatalog(catalog_path),
             InMemoryMemoryStore(),
         )
-        self._catalog_path = catalog_path
 
     def build(self, principal: Principal, goal: str):
-        del goal, self._catalog_path
+        del goal
         return self._assembler.assemble(principal, ContextPolicy())
 
 
@@ -139,7 +140,22 @@ def create_application() -> AsgiGovernedReadApplication:
     )
     service = GovernedReadWorkflowService(
         orchestrator,
-        DeterministicReadWorkflowPlanner(),
+        ModelReadWorkflowPlanner(
+            AllowlistedPlanProvider(
+                provider=_required_setting("ORQESTRA_MODEL_PROVIDER", default="reference"),
+                model=_required_setting("ORQESTRA_MODEL", default="reference-v1"),
+                prompt_version=_required_setting(
+                    "ORQESTRA_PROMPT_VERSION", default="goal-context-v1"
+                ),
+                generators={"reference-v1": ReferenceTypedPlanGenerator()},
+                allowed_capabilities=frozenset(
+                    {
+                        "catalog.search_semantic_metadata",
+                        "data.plan_read_query",
+                    }
+                ),
+            )
+        ),
     )
     control = GovernedReadControl(
         service,

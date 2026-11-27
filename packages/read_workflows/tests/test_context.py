@@ -24,6 +24,7 @@ from semantic_catalog import (
     DataSourceMetadata,
     InMemorySemanticCatalog,
     Provenance,
+    SQLiteSemanticCatalog,
     SourceKind,
 )
 
@@ -134,3 +135,13 @@ def test_assembler_excludes_expired_memory_and_bounds_context():
     assert len(context.catalog) == 1
     assert context.memories == (current,)
     assert expired.memory_id not in {item.memory_id for item in context.memories}
+
+
+def test_sqlite_catalog_reads_only_the_principal_tenant():
+    catalog = SQLiteSemanticCatalog(":memory:")
+    catalog.upsert(source("org-1", "orders", Classification.PUBLIC))
+    catalog.upsert(source("org-2", "secret", Classification.PUBLIC))
+
+    context = ContextAssembler(catalog, InMemoryMemoryStore()).assemble(principal())
+
+    assert [item.source_id for item in context.catalog] == ["orders"]

@@ -17,6 +17,7 @@ from read_workflows import (
     CritiqueState,
     Evidence,
     GovernedCapabilityResult,
+    PlanProvenance,
     ReadPlanStep,
     ReadWorkflowPlan,
     WorkflowResultState,
@@ -98,6 +99,33 @@ def test_happy_path_creates_task_checkpoints_and_emits_events():
         "workflow.checkpointed",
         "workflow.finished",
     }
+
+
+def test_workflow_started_records_plan_provenance():
+    plan = ReadWorkflowPlan(
+        goal="Find revenue",
+        steps=(ReadPlanStep("revenue", "catalog.metric"),),
+        provenance=PlanProvenance(
+            provider="reference",
+            model="reference-v1",
+            prompt_version="goal-context-v1",
+            context_references=("catalog:orders", "memory:record-1"),
+        ),
+    )
+    orchestrator, ledger, _ = build(
+        type("Executor", (), {"execute": lambda self, principal, task_id, step: success(step)})()
+    )
+
+    outcome = orchestrator.run(PRINCIPAL, plan)
+    started = next(
+        event
+        for event in ledger.events_for(PRINCIPAL, task_id=outcome.task.task_id)
+        if event.event_type == "workflow.started"
+    )
+
+    assert started.payload["provider"] == "reference"
+    assert started.payload["model"] == "reference-v1"
+    assert started.payload["context_references"] == ["catalog:orders", "memory:record-1"]
 
 
 @pytest.mark.parametrize("denial", [PermissionError("policy denied"), CapabilityResultState.DENIED])

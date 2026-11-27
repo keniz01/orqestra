@@ -5,6 +5,7 @@ from .contracts import (
     CritiqueState,
     Evidence,
     GovernedCapabilityResult,
+    PlanProvenance,
     ReadPlanStep,
     ReadWorkflowPlan,
     ReadWorkflowReport,
@@ -23,7 +24,14 @@ from .protocol import (
     ReadWorkflowRunner,
     planner_input,
 )
-from .planner import DeterministicReadWorkflowPlanner, PlannedGoal
+from .planner import (
+    AllowlistedPlanProvider,
+    DeterministicReadWorkflowPlanner,
+    ModelReadWorkflowPlanner,
+    PlannedGoal,
+    ReferenceTypedPlanGenerator,
+    TypedPlanGenerator,
+)
 from .execution import KernelCapabilityExecutor, KernelReadRequest, ReadQueryBuilder
 from .runner import InMemoryReadWorkflowRunner
 
@@ -36,6 +44,7 @@ __all__ = [
     "ContextPolicy",
     "ContextScopeError",
     "DeterministicReadWorkflowPlanner",
+    "AllowlistedPlanProvider",
     "Evidence",
     "GovernedCapabilityResult",
     "GovernedContext",
@@ -44,6 +53,7 @@ __all__ = [
     "KernelReadRequest",
     "ReadPlanStep",
     "ReadWorkflowPlan",
+    "PlanProvenance",
     "ReadWorkflowCritic",
     "ReadWorkflowReport",
     "ReadWorkflowPlanner",
@@ -52,6 +62,9 @@ __all__ = [
     "ReadWorkflowRunner",
     "ReadQueryBuilder",
     "PlannedGoal",
+    "ModelReadWorkflowPlanner",
+    "ReferenceTypedPlanGenerator",
+    "TypedPlanGenerator",
     "WorkflowResultState",
     "WorkflowBudget",
     "WorkflowCritique",

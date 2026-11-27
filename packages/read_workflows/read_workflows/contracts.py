@@ -81,6 +81,25 @@ class WorkflowBudget:
 
 
 @dataclass(frozen=True, slots=True)
+class PlanProvenance:
+    """Reproducibility metadata for a model-produced typed plan."""
+
+    provider: str
+    model: str
+    prompt_version: str
+    context_references: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        for field_name in ("provider", "model", "prompt_version"):
+            object.__setattr__(
+                self, field_name, _required_text(getattr(self, field_name), field_name)
+            )
+        object.__setattr__(
+            self, "context_references", tuple(dict.fromkeys(self.context_references))
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class Evidence:
     """A provenance record supplied by a governed capability."""
 
@@ -132,6 +151,7 @@ class ReadWorkflowPlan:
     goal: str
     steps: tuple[ReadPlanStep, ...]
     budget: WorkflowBudget = field(default_factory=WorkflowBudget)
+    provenance: PlanProvenance | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "goal", _required_text(self.goal, "goal"))
@@ -139,6 +159,10 @@ class ReadWorkflowPlan:
             raise ValueError("steps must not be empty")
         if not isinstance(self.budget, WorkflowBudget):
             raise ValueError("budget must be a WorkflowBudget")
+        if self.provenance is not None and not isinstance(
+            self.provenance, PlanProvenance
+        ):
+            raise ValueError("provenance must be PlanProvenance")
         if len(self.steps) > self.budget.max_steps:
             raise ValueError("steps exceed the workflow budget")
         step_ids = [step.step_id for step in self.steps]

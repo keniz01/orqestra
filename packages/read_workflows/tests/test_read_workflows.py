@@ -4,6 +4,7 @@ import pytest
 
 from read_workflows import (
     CapabilityResultState,
+    AllowlistedPlanProvider,
     Evidence,
     GovernedCapabilityResult,
     InMemoryReadWorkflowRunner,
@@ -16,6 +17,8 @@ from read_workflows import (
     CritiqueState,
     DeterministicReadWorkflowPlanner,
     GovernedContext,
+    ModelReadWorkflowPlanner,
+    PlanProvenance,
     WorkflowResultState,
 )
 from execution_kernel import Principal
@@ -161,4 +164,101 @@ def test_planner_rejects_cross_tenant_context():
             Principal(user_id="user-1", org_id="org-1"),
             "read revenue",
             GovernedContext(tenant_id="org-2"),
+        )
+
+
+class _TypedGenerator:
+    def __init__(self, value):
+        self.value = value
+
+    def generate(self, principal, goal, context):
+        return self.value(principal, goal, context) if callable(self.value) else self.value
+
+
+def _model_planner(generator, *, model="model-v1", capabilities=frozenset({"catalog.metric"})):
+    return ModelReadWorkflowPlanner(
+        AllowlistedPlanProvider(
+            provider="test-provider",
+            model=model,
+            prompt_version="prompt-v1",
+            generators={model: _TypedGenerator(generator)},
+            allowed_capabilities=capabilities,
+        )
+    )
+
+
+def test_model_planner_records_provider_model_and_context_references():
+    principal = Principal(user_id="user-1", org_id="org-1")
+    context = GovernedContext(tenant_id="org-1")
+    planner = _model_planner(
+        ReadWorkflowPlan(
+            goal="read revenue",
+            steps=(ReadPlanStep("read", "catalog.metric"),),
+        )
+    )
+
+    planned = planner.plan_for(principal, "read revenue", context)
+
+    assert planned.provenance == PlanProvenance(
+        provider="test-provider",
+        model="model-v1",
+        prompt_version="prompt-v1",
+    )
+
+
+def test_model_planner_rejects_unallowlisted_model():
+    provider = AllowlistedPlanProvider(
+        provider="test-provider",
+        model="missing",
+        prompt_version="prompt-v1",
+        generators={"model-v1": _TypedGenerator(plan())},
+        allowed_capabilities=frozenset({"catalog.metric"}),
+    )
+
+    with pytest.raises(PermissionError, match="allowlisted"):
+        provider.plan(
+            Principal(user_id="user-1", org_id="org-1"),
+            "Compare monthly revenue",
+            GovernedContext(tenant_id="org-1"),
+        )
+
+
+def test_model_planner_rejects_untyped_and_unauthorized_output():
+    principal = Principal(user_id="user-1", org_id="org-1")
+    context = GovernedContext(tenant_id="org-1")
+
+    with pytest.raises(TypeError, match="typed"):
+        _model_planner("not a plan").plan_for(principal, "read revenue", context)
+
+    unauthorized = ReadWorkflowPlan(
+        goal="read revenue",
+        steps=(ReadPlanStep("read", "data.execute_write"),),
+    )
+    with pytest.raises(PermissionError, match="allowlist"):
+        _model_planner(unauthorized).plan_for(principal, "read revenue", context)
+
+
+def test_model_planner_rejects_goal_mismatch_and_budget_overrun():
+    principal = Principal(user_id="user-1", org_id="org-1")
+    context = GovernedContext(tenant_id="org-1")
+    mismatch = ReadWorkflowPlan(
+        goal="different goal",
+        steps=(ReadPlanStep("read", "catalog.metric"),),
+    )
+    with pytest.raises(ValueError, match="goal"):
+        _model_planner(mismatch).plan_for(principal, "read revenue", context)
+
+    two_steps = ReadWorkflowPlan(
+        goal="read revenue",
+        steps=(
+            ReadPlanStep("one", "catalog.metric"),
+            ReadPlanStep("two", "catalog.metric"),
+        ),
+    )
+    with pytest.raises(ValueError, match="budget"):
+        _model_planner(two_steps).plan_for(
+            principal,
+            "read revenue",
+            context,
+            budget=WorkflowBudget(max_steps=1),
         )

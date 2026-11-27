@@ -122,7 +122,20 @@ class GovernedReadOrchestrator:
             "workflow.started",
             "allow",
             "Governed read workflow started.",
-            payload={"lease_id": lease.lease_id, "plan_steps": len(plan.steps)},
+            payload={
+                "lease_id": lease.lease_id,
+                "plan_steps": len(plan.steps),
+                **(
+                    {
+                        "provider": plan.provenance.provider,
+                        "model": plan.provenance.model,
+                        "prompt_version": plan.provenance.prompt_version,
+                        "context_references": list(plan.provenance.context_references),
+                    }
+                    if plan.provenance is not None
+                    else {}
+                ),
+            },
         )
 
         checkpoint = self._checkpoints.save(

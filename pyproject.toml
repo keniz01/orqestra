@@ -9,6 +9,9 @@ dependencies = [
 ]
 
 [tool.pytest.ini_options]
+markers = [
+    "live: tests requiring Docker-backed services",
+]
 pythonpath = [
     "packages/execution_kernel",
     "packages/task_runtime",

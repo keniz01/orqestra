@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.0-pg16@sha256:a132765ec351c65111b5b675928a3a0515a466a40f97277329db8b8209ad8bc9
+    environment:
+      POSTGRES_USER: orqestra_test
+      POSTGRES_PASSWORD: orqestra_test_password
+      POSTGRES_DB: orqestra_test
+    ports:
+      - "127.0.0.1:55433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orqestra_test -d orqestra_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
+    volumes:
+      - orqestra_test_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  orqestra_test_postgres_data:

@@ -53,6 +53,16 @@ authenticated control API exposing `POST /api/workflows` and
 `GET /api/workflows/{trace_id}`. Authentication and principal resolution remain
 server-owned; the browser submits goals only.
 
+Run the live PostgreSQL adapter checks with Docker:
+
+```bash
+./scripts/test-live-postgres.sh
+```
+
+The test Compose file uses a pinned PostgreSQL image, a health check, a
+loopback-only port, and automatic volume cleanup. The live test is skipped by
+the normal Python suite unless `ORQESTRA_TEST_POSTGRES_DSN` is set.
+
 ## Repository guardrails
 
 - `.gitignore` excludes Python caches, virtual environments, build output, and

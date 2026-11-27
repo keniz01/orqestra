@@ -1,0 +1,50 @@
+name: Release images
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Existing immutable image tag to publish or redeploy
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_REGISTRY: ghcr.io/${{ github.repository }}
+      IMAGE_TAG: ${{ inputs.image_tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.control
+          push: true
+          tags: |
+            ${{ env.IMAGE_REGISTRY }}/control:${{ env.IMAGE_TAG }}
+            ${{ env.IMAGE_REGISTRY }}/control:${{ github.sha }}
+          provenance: true
+          sbom: true
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.web
+          push: true
+          tags: |
+            ${{ env.IMAGE_REGISTRY }}/web:${{ env.IMAGE_TAG }}
+            ${{ env.IMAGE_REGISTRY }}/web:${{ github.sha }}
+          provenance: true
+          sbom: true

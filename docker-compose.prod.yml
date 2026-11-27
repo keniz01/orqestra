@@ -1,0 +1,8 @@
+services:
+  control:
+    image: ${ORQESTRA_IMAGE_REGISTRY:?Set ORQESTRA_IMAGE_REGISTRY}/control:${ORQESTRA_IMAGE_TAG:?Set ORQESTRA_IMAGE_TAG}
+    build: !reset null
+
+  web:
+    image: ${ORQESTRA_IMAGE_REGISTRY:?Set ORQESTRA_IMAGE_REGISTRY}/web:${ORQESTRA_IMAGE_TAG:?Set ORQESTRA_IMAGE_TAG}
+    build: !reset null

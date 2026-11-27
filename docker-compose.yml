@@ -1,0 +1,104 @@
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.0-pg16@sha256:a132765ec351c65111b5b675928a3a0515a466a40f97277329db8b8209ad8bc9
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-orqestra}
+      POSTGRES_DB: ${POSTGRES_DB:-orqestra}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /run
+      - /tmp
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  control:
+    build:
+      context: .
+      dockerfile: Dockerfile.control
+    environment:
+      AUTH0_DOMAIN_FILE: /run/secrets/auth0_domain
+      AUTH0_AUDIENCE_FILE: /run/secrets/auth0_audience
+      ORQESTRA_TENANT_DATABASES_FILE: /run/secrets/tenant_databases
+      ORQESTRA_DATABASE_ID: ${ORQESTRA_DATABASE_ID:-analytics}
+      ORQESTRA_ALLOWED_ROLES: ${ORQESTRA_ALLOWED_ROLES:-viewer}
+      ORQESTRA_DB_CONNECT_TIMEOUT: ${ORQESTRA_DB_CONNECT_TIMEOUT:-5}
+      ORQESTRA_DB_TIMEOUT: ${ORQESTRA_DB_TIMEOUT:-30}
+    secrets:
+      - auth0_domain
+      - auth0_audience
+      - tenant_databases
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    networks:
+      - frontend
+    depends_on:
+      control:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:uid=101,gid=101,mode=755
+      - /var/run:uid=101,gid=101,mode=755
+      - /tmp:uid=101,gid=101,mode=755
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "127.0.0.1:${ORQESTRA_WEB_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+networks:
+  frontend:
+  backend:
+    internal: true
+
+volumes:
+  postgres_data:
+
+secrets:
+  postgres_password:
+    file: ${POSTGRES_PASSWORD_FILE:?Set POSTGRES_PASSWORD_FILE to a provisioned secret file}
+  auth0_domain:
+    file: ${AUTH0_DOMAIN_FILE:?Set AUTH0_DOMAIN_FILE to a provisioned secret file}
+  auth0_audience:
+    file: ${AUTH0_AUDIENCE_FILE:?Set AUTH0_AUDIENCE_FILE to a provisioned secret file}
+  tenant_databases:
+    file: ${ORQESTRA_TENANT_DATABASES_FILE:?Set ORQESTRA_TENANT_DATABASES_FILE to a provisioned JSON file}

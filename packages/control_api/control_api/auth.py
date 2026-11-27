@@ -55,19 +55,19 @@ class Auth0Configuration:
     def from_environment(cls) -> Auth0Configuration:
         """Load production configuration without accepting request metadata."""
 
-        domain = os.getenv("AUTH0_DOMAIN", "").strip()
+        domain = _read_setting("AUTH0_DOMAIN")
         audience = (
-            os.getenv("AUTH0_AUDIENCE", "").strip()
-            or os.getenv("AUTH0_API_AUDIENCE", "").strip()
+            _read_setting("AUTH0_AUDIENCE")
+            or _read_setting("AUTH0_API_AUDIENCE")
         )
         if not domain or not audience:
             raise ValueError("AUTH0_DOMAIN and AUTH0_AUDIENCE are required.")
         return cls(
             domain=domain,
             audience=audience,
-            issuer=os.getenv("AUTH0_ISSUER") or None,
-            tenant_claim=os.getenv("AUTH0_TENANT_CLAIM", DEFAULT_TENANT_CLAIM),
-            roles_claim=os.getenv("AUTH0_ROLES_CLAIM", DEFAULT_ROLES_CLAIM),
+            issuer=_read_setting("AUTH0_ISSUER") or None,
+            tenant_claim=_read_setting("AUTH0_TENANT_CLAIM") or DEFAULT_TENANT_CLAIM,
+            roles_claim=_read_setting("AUTH0_ROLES_CLAIM") or DEFAULT_ROLES_CLAIM,
         )
 
 
@@ -121,6 +121,18 @@ def _extract_bearer_token(value: object) -> str | None:
     if separator != " " or scheme.lower() != "bearer" or not token or " " in token:
         return None
     return token
+
+
+def _read_setting(name: str) -> str:
+    value = os.getenv(name)
+    if value is not None and value.strip():
+        return value.strip()
+    file_name = os.getenv(f"{name}_FILE")
+    if file_name:
+        from pathlib import Path
+
+        return Path(file_name).read_text(encoding="utf-8").strip()
+    return ""
 
 
 def _principal_from_claims(

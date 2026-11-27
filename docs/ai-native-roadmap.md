@@ -1,10 +1,13 @@
 # AI-Native Platform Roadmap
 
-**Status:** Proposed
-**Decision gate:** Begin only after the target architecture is approved
-**Last reviewed:** 2026-11-25
+**Status:** Phase 0 approved; Phase 1–4 foundations implemented
+**Decision gate:** Phase 5 product implementation
+**Last reviewed:** 2026-11-27
 
-## Phase 0 — Architecture agreement and invariants
+The approved architecture decisions are recorded in
+[`architecture-decision-record.md`](architecture-decision-record.md).
+
+## Phase 0 — Architecture agreement and invariants — **COMPLETE**
 
 Define and approve:
 
@@ -16,7 +19,9 @@ Define and approve:
 - supported connectors;
 - non-negotiable execution and tenant-isolation invariants.
 
-**Exit:** approved architecture, threat model, and decision record.
+**Exit:** approved architecture, threat model, and decision record. See the
+architecture decision record for the initial identity, connector, model,
+approval, classification, retention, audit, and autonomy decisions.
 
 ## Phase 1 — Extract the deterministic security kernel
 
@@ -70,7 +75,7 @@ Add:
 **Exit:** agents receive only tenant-authorized and classification-compatible
 context.
 
-## Phase 4 — Introduce autonomous read workflows
+## Phase 4 — Introduce autonomous read workflows — **FOUNDATION COMPLETE**
 
 Start with read-only workflows:
 
@@ -87,13 +92,15 @@ goal
 Add confidence, citations, query hashes, budgets, and reproducible task traces.
 
 **Exit:** L2/L3 read-only workflows complete without direct SQL or credential
-access.
+access. The first release slice is proven by the Phase 4 integration test:
+goal → semantic discovery → typed plan → governed execution →
+evidence-backed report.
 
-## Phase 5 — Rebuild the product experience
+## Phase 5 — Rebuild the product experience — **NEXT**
 
 Replace the SQL-first dashboard with:
 
-- goal-oriented workspaces;
+- goal-oriented workspaces for the first governed read workflow;
 - live plan and execution timelines;
 - evidence and provenance panels;
 - approval inbox;
